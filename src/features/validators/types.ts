@@ -1,16 +1,16 @@
 import { BigNumberish } from 'ethers'
 import { FeeEstimate } from 'src/features/fees/types'
 
-export type EligibleGroupsVotesRaw = [string[], BigNumberish[]] // group addresses then votes
+export type EligibleGroupsVotesRaw = [Address[], BigNumberish[]] // group addresses then votes
 
 export interface ValidatorGroup {
-  address: string
+  address: Address
   name: string
   url: string
   eligible: boolean
   capacity: string
   votes: string
-  members: Record<string, Validator>
+  members: Record<Address, Validator>
 }
 
 export enum ValidatorStatus {
@@ -19,10 +19,10 @@ export enum ValidatorStatus {
 }
 
 export interface Validator {
-  address: string
+  address: Address
   name: string
   score: string
-  signer: string
+  signer: Address
   status: ValidatorStatus
 }
 
@@ -35,7 +35,7 @@ export enum ValidatorGroupStatus {
 
 export interface ValidatorGroupTableRow {
   id: string
-  address: string
+  address: Address
   name: string
   url: string
   members: Record<string, Validator>
@@ -65,10 +65,33 @@ export function stakeActionLabel(type: StakeActionType, activeTense = false) {
 }
 
 export interface StakeTokenParams {
-  groupAddress: string
+  groupAddress: Address
   amountInWei: string
   action: StakeActionType
   feeEstimates?: FeeEstimate[]
 }
 
 export type GroupVotes = Record<string, { active: string; pending: string }> // address to votes
+
+export enum StakeEventType {
+  Activate = 'activate',
+  Revoke = 'revoke', // Revoke of active votes (i.e. not pending)
+}
+
+export interface StakeEvent {
+  type: StakeEventType
+  group: Address
+  value: string
+  units: string
+  blockNumber: number
+  timestamp: number
+  txHash: string
+}
+
+export interface StakeEventTableRow {
+  id: string
+  group: string // group name or address
+  action: StakeEventType
+  amount: number
+  timestamp: number
+}

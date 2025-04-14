@@ -6,16 +6,16 @@ import { encodeAddressForQr } from 'src/features/qr/utils'
 
 export function useAddressQrCodeModal() {
   const { showModalWithContent } = useModal()
-  return (address: string) => {
+  return (address: Address) => {
     const data = encodeAddressForQr(address)
     showModalWithContent({
-      head: 'Your Wallet Address',
+      head: 'Your Account Address',
       content: <AddressQrCodeModal address={address} data={data} />,
     })
   }
 }
 
-function AddressQrCodeModal({ address, data }: { address: string; data: string }) {
+function AddressQrCodeModal({ address, data }: { address: Address; data: string }) {
   return (
     <Box direction="column" align="center">
       <div css={{ marginBottom: '1em', paddingLeft: '1em' }}>

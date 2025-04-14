@@ -1,5 +1,5 @@
 import TransportNodeHid from '@ledgerhq/hw-transport-node-hid-noevents'
-import { logger } from 'ethers'
+import { logger } from 'src/utils/logger'
 
 export async function getLedgerTransport() {
   if (await TransportNodeHid.isSupported()) {

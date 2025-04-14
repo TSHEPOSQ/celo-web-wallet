@@ -1,25 +1,33 @@
 import { PayloadAction } from '@reduxjs/toolkit'
-import { RootState } from 'src/app/rootReducer'
+import { appSelect } from 'src/app/appSelect'
+import { getWalletConnectVersion } from 'src/features/walletConnect/utils'
 import {
   disconnectWcClient,
   failWcSession,
   initializeWcClient,
 } from 'src/features/walletConnect/walletConnectSlice'
 import { logger } from 'src/utils/logger'
-import { call, cancel, put, select, spawn, take } from 'typed-redux-saga'
+import { call, cancel, put, spawn, take } from 'typed-redux-saga'
 
-let runWalletConnectSessionFn: any
+let runWalletConnectV2SessionFn: any
 
 // This watches for init action dispatches and forks off a saga
 // to run the session
 export function* watchWalletConnect() {
   while (true) {
     const initAction = (yield* take(initializeWcClient.type)) as PayloadAction<string>
+    const uri = initAction.payload
     logger.debug('Starting new WalletConnect session')
 
-    const address = yield* select((state: RootState) => state.wallet.address)
+    const address = yield* appSelect((state) => state.wallet.address)
     if (!address) {
       yield* put(failWcSession('Must setup account first'))
+      continue
+    }
+
+    const version = getWalletConnectVersion(uri)
+    if (!version) {
+      yield* put(failWcSession('Cannot determine WC version'))
       continue
     }
 
@@ -29,7 +37,6 @@ export function* watchWalletConnect() {
       continue
     }
 
-    const uri = initAction.payload
     const sessionTask = yield* spawn(sessionRunner, uri)
 
     yield* take(disconnectWcClient.type)
@@ -41,16 +48,16 @@ export function* watchWalletConnect() {
 // Dynamic importing for code splitting
 // The WalletConnect bundle is large and includes many libs
 async function dynamicImportWalletConnect() {
-  if (runWalletConnectSessionFn) return runWalletConnectSessionFn
+  if (runWalletConnectV2SessionFn) return runWalletConnectV2SessionFn
 
   try {
-    logger.debug('Fetching WalletConnect bundle')
-    const wcModule = await import(
-      /* webpackChunkName: "walletconnect" */ 'src/features/walletConnect/walletConnect'
+    logger.debug('Fetching WalletConnect V2 bundle')
+    const wcModule2 = await import(
+      /* webpackChunkName: "walletconnect2" */ 'src/features/walletConnect/walletConnect'
     )
-    logger.debug('Done fetching WalletConnect bundle')
-    runWalletConnectSessionFn = wcModule.runWalletConnectSession
-    return runWalletConnectSessionFn
+    runWalletConnectV2SessionFn = wcModule2.runWalletConnectSession
+    logger.debug('Done fetching WalletConnect V2 bundle')
+    return runWalletConnectV2SessionFn
   } catch (error) {
     logger.error('Failed to load WalletConnect bundle', error)
     return null

@@ -1,5 +1,5 @@
 import { createAction, createSlice } from '@reduxjs/toolkit'
-import type { SessionTypes } from '@walletconnect/types'
+import { WalletKitTypes } from '@reown/walletkit'
 import {
   SessionStatus,
   WalletConnectSession,
@@ -7,18 +7,24 @@ import {
 } from 'src/features/walletConnect/types'
 
 export const initializeWcClient = createAction<string>('walletConnect/init')
-export const proposeWcSession = createAction<SessionTypes.Proposal>('walletConnect/proposeSession')
+export const proposeWcSession = createAction<WalletKitTypes.SessionProposal>(
+  'walletConnect/proposeSession'
+)
 export const approveWcSession = createAction('walletConnect/approveSession')
 export const rejectWcSession = createAction('walletConnect/rejectSession')
-export const createWcSession = createAction<SessionTypes.Settled>('walletConnect/createSession')
-export const updateWcSession = createAction<SessionTypes.UpdateParams>(
+export const createWcSession = createAction<WalletKitTypes.SessionProposal>(
+  'walletConnect/createSession'
+)
+export const updateWcSession = createAction<WalletKitTypes.SessionProposal>(
   'walletConnect/updateSession'
 )
-export const deleteWcSession = createAction<SessionTypes.DeleteParams>(
+export const deleteWcSession = createAction<{ id: number; topic: string }>(
   'walletConnect/deleteSession'
 )
 export const failWcSession = createAction<string>('walletConnect/fail')
-export const requestFromWc = createAction<SessionTypes.RequestEvent>('walletConnect/requestEvent')
+export const requestFromWc = createAction<WalletKitTypes.SessionRequest>(
+  'walletConnect/requestEvent'
+)
 export const approveWcRequest = createAction('walletConnect/approveRequest')
 export const rejectWcRequest = createAction('walletConnect/rejectRequest')
 export const completeWcRequest = createAction('walletConnect/completeRequest')
@@ -31,7 +37,7 @@ interface walletConnectState {
   status: WalletConnectStatus
   uri: string | null
   session: WalletConnectSession | null
-  request: SessionTypes.RequestEvent | null
+  request: WalletKitTypes.SessionRequest | null
   error: string | null
 }
 

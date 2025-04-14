@@ -1,9 +1,10 @@
 import TransportU2F from '@ledgerhq/hw-transport-u2f'
 import TransportWebHID from '@ledgerhq/hw-transport-webhid'
+import { logger } from 'src/utils/logger'
 // import TransportWebUSB from '@ledgerhq/hw-transport-webhid'
-import { logger } from 'ethers'
 
 export async function getLedgerTransport() {
+  // if (transport) return transport
   // Replacing WebUSB for WebHID because usb is broken in latest chrome
   // https://github.com/LedgerHQ/ledgerjs/issues/607
   // if (await TransportWebUSB.isSupported()) {

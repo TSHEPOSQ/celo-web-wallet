@@ -1,6 +1,6 @@
 import { utils } from 'ethers'
-import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
+import { useAppDispatch } from 'src/app/hooks'
 import { defaultButtonStyles } from 'src/components/buttons/Button'
 import PasteIcon from 'src/components/icons/paste.svg'
 import QrCodeIcon from 'src/components/icons/qr_code.svg'
@@ -11,26 +11,26 @@ import { useAddressQrCodeModal } from 'src/features/qr/QrCodeModal'
 import { txFlowReset } from 'src/features/txFlow/txFlowSlice'
 import { Color } from 'src/styles/Color'
 import { Stylesheet } from 'src/styles/types'
-import { tryClipboardSet } from 'src/utils/clipboard'
-import { chunk } from 'src/utils/string'
+import { validateAddress } from 'src/utils/addresses'
+import { useClipboardSet } from 'src/utils/clipboard'
+import { chunk, trimToLength } from 'src/utils/string'
 
 type ButtonType = 'send' | 'copy' | 'qrAndCopy'
 
 interface Props {
-  address: string
+  address: Address
+  name?: string
   hideIdenticon?: boolean
   buttonType?: ButtonType
+  isTransparent?: boolean
 }
 
 export function Address(props: Props) {
-  const { address, hideIdenticon, buttonType } = props
-
-  if (!utils.isAddress(address)) {
-    throw new Error('Invalid address')
-  }
+  const { address, name, hideIdenticon, buttonType, isTransparent } = props
+  validateAddress(address, 'Address component')
 
   const onSendButtonClick = useSendToAddress(address)
-  const onCopyButtonClick = useCopyAddress(address)
+  const onCopyButtonClick = useClipboardSet(address)
   const showQrModal = useAddressQrCodeModal()
   const onQrButtonClick = () => {
     showQrModal(address)
@@ -38,30 +38,54 @@ export function Address(props: Props) {
 
   const addressSections = chunk<string>(utils.getAddress(address).substring(2).toUpperCase(), 4)
 
-  const addressContainerStyle = getAddressContainerStyle(hideIdenticon, buttonType)
+  const iconContainerStyle = getIconContainerStyle(isTransparent)
+  const addressContainerStyle = getAddressContainerStyle(
+    hideIdenticon,
+    buttonType,
+    isTransparent,
+    name
+  )
 
   return (
     <Box direction="row" align="center">
       {!hideIdenticon && (
-        <div css={style.iconContainer}>
+        <div css={iconContainerStyle}>
           <Identicon address={address} size={46} />
         </div>
       )}
       <div css={addressContainerStyle}>
-        <Box direction="row" align="center" justify="between">
-          {addressSections.slice(0, 5).map((chunk, index) => (
-            <span key={`address-chunk-${index}`} css={style.addressChunk}>
-              {chunk}
-            </span>
-          ))}
-        </Box>
-        <Box direction="row" align="center" justify="between">
-          {addressSections.slice(5).map((chunk, index) => (
-            <span key={`address-chunk-${index + 5}`} css={style.addressChunk}>
-              {chunk}
-            </span>
-          ))}
-        </Box>
+        {name ? (
+          <>
+            <Box direction="row" align="center">
+              <span css={style.addressChunk}>{trimToLength(name, 22)}</span>
+            </Box>
+            <Box direction="row" align="center">
+              {addressSections.slice(0, 3).map((chunk, index) => (
+                <span key={`address-chunk-${index + 5}`} css={style.addressChunk}>
+                  {chunk}
+                </span>
+              ))}
+              <span css={[style.addressChunk, { padding: 0 }]}>...</span>
+            </Box>
+          </>
+        ) : (
+          <>
+            <Box direction="row" align="center" justify="between">
+              {addressSections.slice(0, 5).map((chunk, index) => (
+                <span key={`address-chunk-${index}`} css={style.addressChunk}>
+                  {chunk}
+                </span>
+              ))}
+            </Box>
+            <Box direction="row" align="center" justify="between">
+              {addressSections.slice(5).map((chunk, index) => (
+                <span key={`address-chunk-${index + 5}`} css={style.addressChunk}>
+                  {chunk}
+                </span>
+              ))}
+            </Box>
+          </>
+        )}
       </div>
       {buttonType === 'send' && (
         <button css={style.button} onClick={onSendButtonClick} title="Send to Address">
@@ -88,8 +112,8 @@ export function Address(props: Props) {
   )
 }
 
-export function useSendToAddress(address: string) {
-  const dispatch = useDispatch()
+export function useSendToAddress(address: Address) {
+  const dispatch = useAppDispatch()
   const navigate = useNavigate()
   return () => {
     dispatch(txFlowReset())
@@ -97,14 +121,16 @@ export function useSendToAddress(address: string) {
   }
 }
 
-export function useCopyAddress(address: string) {
-  return async () => {
-    await tryClipboardSet(address)
-  }
-}
-
-function getAddressContainerStyle(hideIdenticon?: boolean, buttonType?: ButtonType) {
+function getAddressContainerStyle(
+  hideIdenticon?: boolean,
+  buttonType?: ButtonType,
+  isTransparent?: boolean,
+  name?: string
+) {
   const addressContainerStyle = { ...style.addressContainer }
+  if (name) {
+    addressContainerStyle.paddingLeft = 34
+  }
   if (hideIdenticon) {
     addressContainerStyle.paddingLeft = 8
     addressContainerStyle.paddingRight = 8
@@ -120,15 +146,24 @@ function getAddressContainerStyle(hideIdenticon?: boolean, buttonType?: ButtonTy
     addressContainerStyle.paddingTop = 12
     addressContainerStyle.paddingBottom = 12
   }
+  if (isTransparent) {
+    addressContainerStyle.backgroundColor = 'none'
+  }
   return addressContainerStyle
+}
+
+function getIconContainerStyle(isTransparent?: boolean) {
+  return isTransparent ? style.iconContainer : { ...style.iconContainer, ...style.iconShadow }
 }
 
 const style: Stylesheet = {
   iconContainer: {
     zIndex: 10,
+    borderRadius: 23,
+  },
+  iconShadow: {
     backgroundColor: '#FFFFFF',
     boxShadow: '2px 0px 0px 2px #FFFFFF',
-    borderRadius: 23,
   },
   addressContainer: {
     zIndex: 5,

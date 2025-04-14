@@ -1,5 +1,7 @@
 # Frequently Asked Questions
 
+[What is the wallet called?](#what-is-the-wallet-called)
+
 [Where can the app be used?](#where-can-the-app-be-used)
 
 [Does it work on phones?](#does-it-work-on-phones)
@@ -14,11 +16,17 @@
 
 [Is Ledger supported?](#is-ledger-supported)
 
-[Can feature X be added?](#can-feature-x-be-added)
+## What is the wallet called?
+
+The original name for this wallet was just "Celo Wallet", but to avoid confusion it has been renamed to "Othello Wallet".
+
+## Who maintains this wallet?
+
+This wallet was created by [J M Rossy](https://twitter.com/RossyWrote). It is not currently under active development. Only security update will be released.
 
 ## Where can the app be used?
 
-The Celo Wallet can run in a modern browser (Chrome is recommended) or on your desktop (Mac, Windows, and Linux).
+It can run in a modern browser (Chrome is recommended) or on your desktop (Mac, Windows, and Linux).
 The desktop version has stricter security guarantees and is strongly recommended for large accounts.
 
 ## Does it work on phones?
@@ -27,11 +35,11 @@ Yes, the web version was designed from the ground-up to be lightweight and mobil
 
 ## Will it work with Valora wallets?
 
-Yes, you can use your Account Key (mnemonic phrase) to import your account into the web wallet, back into Valora, or use both at the same time.
+Yes, you can use your Account Key (seed phrase) to import your account into Othello, back into Valora, or use both at the same time.
 
 ## How is it different than Valora?
 
-The most obvious difference is platform: Valora runs on iOS and Android, the web wallet runs in any modern browser and on desktop. More abstractly though, Valora is a social payments application whereas the web wallet is just a tool. That's why Valora includes extra features around importing contacts, verifying phone numbers, finding friends, etc. In contrast, one of this wallet's design principles is to be minimal, meaning no analytics, no plugins, and no device permissions (except for Ledger access).
+The most obvious difference is platform: Valora runs on iOS and Android, whereas Othello runs in browsers and on desktop. More abstractly though, Valora is a social payments application whereas the Othello is just a tool. That's why Valora includes extra features around importing contacts, verifying phone numbers, finding friends, etc. In contrast, one of this wallet's design principles is to be minimal, meaning no analytics, no plugins, and no device permissions (except for Ledger access).
 
 ## Is the web version safe?
 
@@ -41,18 +49,14 @@ Long answer: The web version does what it can to protect your funds but web apps
 
 ## Where are my keys stored?
 
-Your mnemonic, from which you keys are derived, is encrypted using your password and stored either in browser local storage for web or on disk for desktop. Your keys never leave your device. In other words, this wallet is a self-sovereign (non-custodial) wallet.
+Your seed phrases, from which you keys are derived, are encrypted using your password and stored either in browser local storage for web or on disk for desktop. Your keys never leave your device. In other words, this wallet is a self-sovereign (non-custodial) wallet.
 
-- Mac: `~/Library/Application Support/celo-web-wallet`
-- Linux: `~/.config/celo-web-wallet or $XDG_CONFIG_HOME/celo-web-wallet`
-- Windows: `C:\Users\{USERNAME}\AppData\Roaming\celo-web-wallet`
+- Mac: `~/Library/Application Support/celo-web-wallet/accounts.json`
+- Linux: `~/.config/celo-web-wallet or $XDG_CONFIG_HOME/celo-web-wallet/accounts.json`
+- Windows: `C:\Users\{USERNAME}\AppData\Roaming\celo-web-wallet\accounts.json`
 
 ## Is Ledger supported?
 
 Yes, Ledger hardware is supported on both the web and desktop versions. Due to browser limitations, Ledger has been found to work best in Chrome.
 
 Note though that currently not all transactions can be parsed by the Celo Ledger app. Simple payments (like CELO or cUSD transfers) will show transaction details on the Ledger itself but transfers with comments or token exchanges will not yet show details.
-
-## Can feature X be added?
-
-Maybe, let's chat about it! Please see the [wallet Discord channel](https://discord.com/channels/600834479145353243/783806028629934110) for open discussion.

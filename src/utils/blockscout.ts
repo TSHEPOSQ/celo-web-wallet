@@ -1,3 +1,7 @@
+import { BigNumber } from 'ethers'
+import { retryAsync } from 'src/utils/retry'
+import { fetchWithTimeout } from 'src/utils/timeout'
+
 interface BlockscoutResponse<R> {
   status: string
   result: R
@@ -5,7 +9,12 @@ interface BlockscoutResponse<R> {
 }
 
 export async function queryBlockscout<P>(url: string) {
-  const response = await fetch(url)
+  const result = await retryAsync(() => executeQuery<P>(url))
+  return result
+}
+
+async function executeQuery<P>(url: string) {
+  const response = await fetchWithTimeout(url)
   if (!response.ok) {
     throw new Error(`Fetch response not okay: ${response.status}`)
   }
@@ -35,9 +44,15 @@ export interface BlockscoutTransactionLog {
   address: string
 }
 
-export function validateBlockscoutLog(log: BlockscoutTransactionLog, topic0?: string) {
+export function validateBlockscoutLog(
+  log: BlockscoutTransactionLog,
+  topic0?: string,
+  minBlock?: number
+) {
   if (!log) throw new Error('Log is nullish')
   if (!log.transactionHash) throw new Error('Log has no tx hash')
+  if (minBlock && (!log.blockNumber || BigNumber.from(log.blockNumber).lt(minBlock)))
+    throw new Error('Log has invalid block number')
   if (!log.topics || !log.topics.length) throw new Error('Log has no topics')
   if (!log.topics || !log.topics.length) throw new Error('Log has no topics')
   if (topic0 && log.topics[0]?.toLowerCase() !== topic0) throw new Error('Log topic is incorrect')

@@ -1,16 +1,18 @@
 import jazzicon from '@metamask/jazzicon'
-import { BigNumber, utils } from 'ethers'
 import { PureComponent } from 'react'
 import { Styles } from 'src/styles/types'
+import { isValidAddress, normalizeAddress } from 'src/utils/addresses'
 
 type Props = {
-  address: string
+  address: Address
   size?: number
   styles?: Styles
 }
 
-function addressToSeed(address: string) {
-  return BigNumber.from(address.slice(0, 8)).toNumber()
+// This should match metamask: https://github.com/MetaMask/metamask-extension/blob/master/ui/helpers/utils/icon-factory.js#L84
+function addressToSeed(address: Address) {
+  const addrStub = normalizeAddress(address).slice(2, 10)
+  return parseInt(addrStub, 16)
 }
 
 export class Identicon extends PureComponent<Props> {
@@ -18,9 +20,7 @@ export class Identicon extends PureComponent<Props> {
     const { address, size: _size, styles } = this.props
     const size = _size ?? 34
 
-    if (!address || !utils.isAddress(address)) {
-      return null
-    }
+    if (!isValidAddress(address)) return null
 
     const jazziconResult = jazzicon(size, addressToSeed(address))
 

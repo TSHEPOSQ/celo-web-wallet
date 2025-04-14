@@ -1,21 +1,25 @@
 import { EventChannel, eventChannel } from '@redux-saga/core'
 import { call as rawCall } from '@redux-saga/core/effects'
 import { PayloadAction } from '@reduxjs/toolkit'
-import WalletConnectClient, { CLIENT_EVENTS } from '@walletconnect/client'
-import { SessionTypes } from '@walletconnect/types'
-import { ERROR as WcError } from '@walletconnect/utils'
-import { RootState } from 'src/app/rootReducer'
+import type WalletKitType from '@reown/walletkit'
+import { WalletKit, WalletKitTypes } from '@reown/walletkit'
+import type CoreType from '@walletconnect/core'
+import { Core } from '@walletconnect/core'
+import { buildApprovedNamespaces, getSdkError } from '@walletconnect/utils'
+import { appSelect } from 'src/app/appSelect'
 import { config } from 'src/config'
-import 'src/features/ledger/buffer'
 import {
-  SessionStatus,
-  WalletConnectMethods,
-  WalletConnectSession,
-} from 'src/features/walletConnect/types'
+  APP_METADATA,
+  SESSION_INIT_TIMEOUT,
+  SESSION_REQUEST_TIMEOUT,
+  SUPPORTED_CHAINS,
+  SUPPORTED_METHODS,
+} from 'src/features/walletConnect/config'
 import {
   handleWalletConnectRequest,
   validateRequestEvent,
-} from 'src/features/walletConnect/walletConnectReqHandler'
+} from 'src/features/walletConnect/requestHandler'
+import { WalletConnectError, WalletConnectSession } from 'src/features/walletConnect/types'
 import {
   approveWcRequest,
   approveWcSession,
@@ -28,32 +32,21 @@ import {
   rejectWcRequest,
   rejectWcSession,
   requestFromWc,
-  updateWcSession,
 } from 'src/features/walletConnect/walletConnectSlice'
+import 'src/polyfills/buffer' // Must be the first import
 import { logger } from 'src/utils/logger'
 import { withTimeout } from 'src/utils/timeout'
 import { errorToString } from 'src/utils/validation'
-import { call, cancelled, delay, fork, put, race, select, take } from 'typed-redux-saga'
+import { call, cancelled, delay, fork, put, race, take } from 'typed-redux-saga'
 
-const APP_METADATA = {
-  name: 'CeloWallet.app',
-  description: `Celo Wallet for ${config.isElectron ? 'Desktop' : 'Web'}`,
-  url: 'https://celowallet.app',
-  icons: ['https://celowallet.app/static/icon.png'],
-}
-
-// alfajores, mainnet, baklava
-const SUPPORTED_CHAINS = ['celo:44787', 'celo:42220', 'celo:62320']
-
-const SESSION_INIT_TIMEOUT = 15000 // 15 seconds
-const SESSION_PROPOSAL_TIMEOUT = 180000 // 3 minutes
-const SESSION_REQUEST_TIMEOUT = 300000 // 5 minutes
+let core: CoreType | undefined = undefined
+let walletKit: WalletKitType | undefined = undefined
 
 // This is what actually interacts with the WC client
 // It initializes it, pairs it, and handles events
 export function* runWalletConnectSession(uri: string) {
   // Initialize the client
-  const { client, channel } = yield* withTimeout(
+  const { walletKit, channel } = yield* withTimeout(
     rawCall(initClient, uri),
     SESSION_INIT_TIMEOUT,
     'Client initialization timed out'
@@ -66,15 +59,7 @@ export function* runWalletConnectSession(uri: string) {
       SESSION_INIT_TIMEOUT,
       'No session proposal received'
     )
-    yield* fork(handleSessionProposal, proposal, client)
-
-    // Wait for a session creation
-    const session = yield* withTimeout(
-      rawCall(waitForSessionCreated, channel),
-      SESSION_PROPOSAL_TIMEOUT,
-      'Creating new session timed out'
-    )
-    yield* call(handleSessionCreated, session)
+    yield* fork(handleSessionProposal, proposal, walletKit)
 
     // Watch for events
     while (true) {
@@ -85,23 +70,28 @@ export function* runWalletConnectSession(uri: string) {
       }
       const { type, payload } = event
       logger.debug('Event from WalletConnect channel', type)
+      if (type === deleteWcSession.type) {
+        // throw new Error('DApp deleted session')
+        logger.debug('DApp deleted session', type)
+        break
+      }
       if (type === proposeWcSession.type) {
         logger.warn('Ignoring new session proposal while one is active')
       }
       if (type === requestFromWc.type) {
-        const requestEvent = payload as SessionTypes.RequestEvent // Event channels loses type
-        yield* fork(handleRequestEvent, requestEvent, client)
+        const requestEvent = payload as WalletKitTypes.SessionRequest
+        yield* fork(handleRequestEvent, requestEvent, walletKit)
       }
     }
   } catch (error) {
     // Note, saga-quirk: errors from fork calls won't be caught here
     yield* put(failWcSession(errorToString(error)))
-    logger.error('Error during WalletConnect session', error)
+    logger.error('Error during WalletConnect V2 session', error)
   } finally {
     if (yield* cancelled()) {
       logger.debug('WalletConnect session cancelled before completion')
     }
-    yield* call(closeClient, client, channel)
+    yield* call(closeClient, walletKit, channel)
   }
 }
 
@@ -109,56 +99,65 @@ export function* runWalletConnectSession(uri: string) {
 // and pair it with the target URI
 async function initClient(uri: string) {
   logger.info('Initializing WalletConnect')
-  // Create new client
-  const client = await WalletConnectClient.init({
-    relayProvider: config.walletConnectRelay,
-    metadata: APP_METADATA,
-    controller: true,
-    logger: 'debug',
-  })
+
+  if (!core || !walletKit) {
+    // Create new client
+    core = new Core({
+      projectId: config.walletConnectV2ProjectId || undefined,
+    })
+
+    walletKit = await WalletKit.init({
+      core,
+      metadata: APP_METADATA,
+    })
+  }
+
   // Set up channel to watch for events
-  const channel = createWalletConnectChannel(client)
-  await client.pair({ uri })
-  return { client, channel }
+  const channel = createWalletConnectChannel(walletKit)
+  await walletKit.pair({ uri })
+  return { core, walletKit, channel }
 }
 
 // Creates a channel to observer for wc client events
 // This is the typical way to connect events into saga-land
-function createWalletConnectChannel(client: WalletConnectClient) {
+function createWalletConnectChannel(walletKit: WalletKitType) {
   return eventChannel<PayloadAction<any>>((emit) => {
-    if (!client) throw new Error('Cannot create WC channel without client')
+    if (!walletKit) throw new Error('Cannot create WC channel without kit')
 
-    const onSessionProposal = (session: SessionTypes.Proposal) => emit(proposeWcSession(session))
-    const onSessionCreated = (session: SessionTypes.Settled) => emit(createWcSession(session))
-    const onSessionUpdated = (session: SessionTypes.UpdateParams) => emit(updateWcSession(session))
-    const onSessionDeleted = (session: SessionTypes.DeleteParams) => emit(deleteWcSession(session))
-    const onSessionRequest = (request: SessionTypes.RequestEvent) => emit(requestFromWc(request))
+    const onSessionProposal = (session: WalletKitTypes.SessionProposal) =>
+      emit(proposeWcSession(session))
+    // const onSessionCreated = (session: WalletKitTypes.) => emit(createWcSession(session))
+    // const onSessionUpdated = (session: WalletKitTypes.Event) => emit(updateWcSession(session))
+    const onSessionDeleted = (session: { id: number; topic: string }) =>
+      emit(deleteWcSession(session))
+    const onSessionRequest = (request: WalletKitTypes.SessionRequest) =>
+      emit(requestFromWc(request))
     // const onPairingProposal = (pairing: PairingTypes.ProposeParams) => handlePairingEvent(pairing)
     // const onPairingCreated = (pairing: PairingTypes.CreateParams) => handlePairingEvent(pairing)
     // const onPairingUpdated = (pairing: PairingTypes.UpdateParams) => handlePairingEvent(pairing)
     // const onPairingDeleted = (pairing: PairingTypes.DeleteParams) => handlePairingEvent(pairing)
 
-    client.on(CLIENT_EVENTS.session.proposal, onSessionProposal)
-    client.on(CLIENT_EVENTS.session.created, onSessionCreated)
-    client.on(CLIENT_EVENTS.session.updated, onSessionUpdated)
-    client.on(CLIENT_EVENTS.session.deleted, onSessionDeleted)
-    client.on(CLIENT_EVENTS.session.request, onSessionRequest)
+    walletKit.on('session_proposal', onSessionProposal)
+    // walletKit.on(CLIENT_EVENTS.session.created, onSessionCreated)
+    // walletKit.on(CLIENT_EVENTS.session.updated, onSessionUpdated)
+    walletKit.on('session_delete', onSessionDeleted)
+    walletKit.on('session_request', onSessionRequest)
     // client.on(CLIENT_EVENTS.pairing.proposal, onPairingProposal)
     // client.on(CLIENT_EVENTS.pairing.created, onPairingCreated)
     // client.on(CLIENT_EVENTS.pairing.updated, onPairingUpdated)
     // client.on(CLIENT_EVENTS.pairing.deleted, onPairingDeleted)
 
     return () => {
-      if (!client) {
+      if (!walletKit) {
         logger.error('WC client already missing before channel cleanup')
         return
       }
       logger.debug('Cleaning up WC channel')
-      client.off(CLIENT_EVENTS.session.proposal, onSessionProposal)
-      client.off(CLIENT_EVENTS.session.created, onSessionCreated)
-      client.off(CLIENT_EVENTS.session.updated, onSessionUpdated)
-      client.off(CLIENT_EVENTS.session.deleted, onSessionDeleted)
-      client.off(CLIENT_EVENTS.session.request, onSessionRequest)
+      walletKit.off('session_proposal', onSessionProposal)
+      // client.off(CLIENT_EVENTS.session.created, onSessionCreated)
+      // client.off(CLIENT_EVENTS.session.updated, onSessionUpdated)
+      walletKit.off('session_delete', onSessionDeleted)
+      walletKit.off('session_request', onSessionRequest)
       // client.off(CLIENT_EVENTS.pairing.proposal, onPairingProposal)
       // client.off(CLIENT_EVENTS.pairing.created, onPairingCreated)
       // client.off(CLIENT_EVENTS.pairing.updated, onPairingUpdated)
@@ -170,18 +169,21 @@ function createWalletConnectChannel(client: WalletConnectClient) {
 function* waitForSessionProposal(channel: EventChannel<PayloadAction<any>>) {
   while (true) {
     const event = yield* take(channel)
-    if (event?.type === proposeWcSession.type) return event.payload as SessionTypes.Proposal
+    if (event?.type === proposeWcSession.type) return event.payload
   }
 }
 
 // Handle a session proposal
 // The user must review the details and approve/reject
-function* handleSessionProposal(proposal: SessionTypes.Proposal, client: WalletConnectClient) {
+function* handleSessionProposal(
+  proposal: WalletKitTypes.SessionProposal,
+  walletKit: WalletKitType
+) {
   logger.debug('WalletConnect session proposed')
 
   yield* put(proposeWcSession(proposal))
 
-  const isValid = yield* call(validateProposal, proposal, client)
+  const isValid = yield* call(validateProposal, proposal)
   if (!isValid) {
     yield* put(failWcSession('Session proposal is invalid'))
     throw new Error('WalletConnect session proposal invalid')
@@ -189,89 +191,93 @@ function* handleSessionProposal(proposal: SessionTypes.Proposal, client: WalletC
 
   const decision = yield* take([approveWcSession.type, rejectWcSession.type])
   if (decision.type == approveWcSession.type) {
-    const address = yield* select((s: RootState) => s.wallet.address)
-    yield* call(approveClientSession, client, proposal, address)
+    const address = yield* appSelect((s) => s.wallet.address)
+    yield* call(approveClientSession, proposal, walletKit, address)
+    logger.debug('WalletConnect session created')
+    yield* put(createWcSession(proposal))
   } else {
-    yield* call(rejectClientSession, client, proposal, 'user denied')
+    yield* call(rejectClientSession, proposal, walletKit, 'user denied')
     throw new Error('WalletConnect session proposal rejected')
   }
 }
 
-async function validateProposal(proposal: SessionTypes.Proposal, client: WalletConnectClient) {
+async function validateProposal(
+  proposal: WalletKitTypes.SessionProposal
+  // walletKit: WalletKitType
+) {
   if (!proposal) {
     logger.warn('Rejecting WalletConnect session: no proposal')
-    await client.reject({ proposal, reason: WcError.MISSING_OR_INVALID.format() })
+    // await walletKit.rejectSession({ id: proposal.id, reason: getSdkError('USER_REJECTED_METHODS') })
     return false
   }
 
-  if (
-    proposal.permissions.blockchain.chains.find((chainId) => !SUPPORTED_CHAINS.includes(chainId))
-  ) {
-    logger.warn('Rejecting WalletConnect session: unsupported chain')
-    await client.reject({ proposal, reason: WcError.UNSUPPORTED_CHAINS.format() })
-    return false
-  }
+  // TODO restore and update for the latest WC lib shapes
+  // const unsupportedChain = proposal.permissions.blockchain.chains.find(
+  //   (chainId) => !SUPPORTED_CHAINS.includes(chainId)
+  // )
+  // if (unsupportedChain) {
+  //   logger.warn(`Rejecting WalletConnect session: unsupported chain ${unsupportedChain}`)
+  //   await client.reject({ proposal, reason: WcError.UNSUPPORTED_CHAINS.format() })
+  //   return false
+  // }
 
-  const supportedMethods = Object.values(WalletConnectMethods) as string[]
-  if (proposal.permissions.jsonrpc.methods.find((method) => !supportedMethods.includes(method))) {
-    logger.warn('Rejecting WalletConnect session: unsupported method')
-    await client.reject({
-      proposal,
-      reason: WcError.UNSUPPORTED_JSONRPC.format(),
-    })
-    return false
-  }
+  // const supportedMethods = Object.values(WalletConnectMethod) as string[]
+  // const unsupportedMethod = proposal.permissions.jsonrpc.methods.find(
+  //   (method) => !supportedMethods.includes(method)
+  // )
+  // if (unsupportedMethod) {
+  //   logger.warn(`Rejecting WalletConnect session: unsupported method ${unsupportedMethod}`)
+  //   await client.reject({
+  //     proposal,
+  //     reason: WcError.UNSUPPORTED_JSONRPC.format(),
+  //   })
+  //   return false
+  // }
 
   return true
 }
 
-function* waitForSessionCreated(channel: EventChannel<PayloadAction<any>>) {
-  while (true) {
-    const event = yield* take(channel)
-    if (event?.type === createWcSession.type) return event.payload as SessionTypes.Settled
-  }
-}
-
 function approveClientSession(
-  client: WalletConnectClient,
-  proposal: SessionTypes.Proposal,
+  proposal: WalletKitTypes.SessionProposal,
+  walletKit: WalletKitType,
   account: string | null
 ) {
   logger.debug('Approving WalletConnect session proposal')
 
   if (!account) throw new Error('Cannot approve WC session before creating account')
 
-  const response: SessionTypes.Response = {
-    state: {
-      accounts: [`${account}@celo:${config.chainId}`],
+  const approvedNamespaces = buildApprovedNamespaces({
+    proposal: proposal.params,
+    supportedNamespaces: {
+      eip155: {
+        chains: SUPPORTED_CHAINS,
+        methods: SUPPORTED_METHODS,
+        events: ['accountsChanged', 'chainChanged'],
+        accounts: [`eip155:${config.chainId}:${account}`],
+      },
     },
-    metadata: APP_METADATA,
-  }
-  return client.approve({ proposal, response })
+  })
+
+  return walletKit.approveSession({ id: proposal.id, namespaces: approvedNamespaces })
 }
 
 function rejectClientSession(
-  client: WalletConnectClient,
-  proposal: SessionTypes.Proposal,
+  proposal: WalletKitTypes.SessionProposal,
+  walletKit: WalletKitType,
   reason: string
 ) {
   logger.warn(`Rejecting WalletConnect session: ${reason}`)
-  return client.reject({
-    proposal,
-    reason: WcError.NOT_APPROVED.format(),
+  return walletKit.rejectSession({
+    id: proposal.id,
+    reason: getSdkError('USER_REJECTED'),
   })
 }
 
-function* handleSessionCreated(session: SessionTypes.Created) {
-  logger.debug('WalletConnect session created')
-  yield* put(createWcSession(session))
-}
-
-function* handleRequestEvent(event: SessionTypes.RequestEvent, client: WalletConnectClient) {
+function* handleRequestEvent(event: WalletKitTypes.SessionRequest, walletKit: WalletKitType) {
   logger.debug('WalletConnect session request received')
 
   try {
-    const isValid = yield* call(validateRequestEvent, event, client)
+    const isValid = yield* call(validateRequestEvent, event, walletKit, denyRequest)
     if (!isValid) return // silently reject invalid requests
 
     yield* put(requestFromWc(event))
@@ -282,7 +288,14 @@ function* handleRequestEvent(event: SessionTypes.RequestEvent, client: WalletCon
       timeout: delay(SESSION_REQUEST_TIMEOUT),
     })
 
-    yield* call(handleWalletConnectRequest, event, client, !!approve)
+    yield* call(
+      handleWalletConnectRequest,
+      event,
+      walletKit,
+      !!approve,
+      approveRequest,
+      denyRequest
+    )
     if (timeout) {
       yield* put(failWcRequest('Request timed out, please try again'))
     }
@@ -292,76 +305,84 @@ function* handleRequestEvent(event: SessionTypes.RequestEvent, client: WalletCon
   }
 }
 
-function* closeClient(client: WalletConnectClient, channel: EventChannel<PayloadAction<any>>) {
+export function denyRequest(
+  event: WalletKitTypes.SessionRequest,
+  walletKit: WalletKitType,
+  error: WalletConnectError
+) {
+  logger.debug('Denying WalletConnect request event', event.id, error)
+  return respond(event, walletKit, undefined, error)
+}
+
+export function approveRequest(
+  event: WalletKitTypes.SessionRequest,
+  walletKit: WalletKitType,
+  result: any
+) {
+  logger.debug('Approving WalletConnect request event', event.id)
+  return respond(event, walletKit, result)
+}
+
+function respond(
+  event: WalletKitTypes.SessionRequest,
+  walletKit: WalletKitType,
+  result?: any,
+  error?: string
+) {
+  const base = {
+    topic: event.topic,
+    response: {
+      id: event.id,
+      jsonrpc: '2.0',
+    },
+  }
+  let response
+  if (result) {
+    response = { ...base, response: { ...base.response, result } }
+  } else if (error) {
+    response = {
+      ...base,
+      response: {
+        ...base.response,
+        error: {
+          code: 5000,
+          message: error,
+        },
+      },
+    }
+  } else {
+    throw new Error('Cannot respond without result or error')
+  }
+  return walletKit.respondSessionRequest(response)
+}
+
+function* closeClient(walletKit: WalletKitType, channel: EventChannel<PayloadAction<any>>) {
   logger.info('Closing WalletConnect client')
-  if (!client || !channel) {
+  if (!walletKit || !channel) {
     logger.error('Attempting to close WC client before properly initialized')
     return
   }
   // Close the event channel to clean it up
   channel.close()
-  const session = yield* select((state: RootState) => state.walletConnect.session)
-  yield* call(disconnectClient, client, session)
+  const session = yield* appSelect((state) => state.walletConnect.session)
+  yield* call(disconnectClient, walletKit, session)
   yield* put(disconnectWcClient())
 }
 
-async function disconnectClient(client: WalletConnectClient, session: WalletConnectSession | null) {
+async function disconnectClient(walletKit: WalletKitType, session: WalletConnectSession | null) {
   logger.debug('Disconnecting WalletConnect Client')
 
-  // Remove any listeners that may remain
-  // client.relayer.provider.events.removeAllListeners()
-  client.session.events.removeAllListeners()
-  client.pairing.events.removeAllListeners()
-
   // Disconnect the active session if there is one
-  const reason = WcError.USER_DISCONNECTED.format()
-  if (session && session.status === SessionStatus.Settled) {
+  if (session) {
     try {
-      await client.disconnect({
-        topic: session.data.topic,
-        reason,
+      await walletKit.disconnectSession({
+        topic: session.data.params.pairingTopic,
+        reason: getSdkError('USER_DISCONNECTED'),
       })
     } catch (error) {
       logger.error('Error disconnecting WalletConnect client', error)
     }
   }
-
-  // // To be thorough, also clean up the sessions and pairings, may revisit later
-  // for (const topic of client.session.topics) {
-  //   try {
-  //     await client.session.delete({ topic, reason })
-  //   } catch (error) {
-  //     logger.warn('Error deleting WalletConnect session', error)
-  //   }
-  // }
-  // for (const topic of client.session.pending.topics) {
-  //   try {
-  //     await client.session.pending.delete(topic, reason)
-  //   } catch (error) {
-  //     logger.warn('Error deleting WalletConnect session', error)
-  //   }
-  // }
-  // for (const topic of client.pairing.topics) {
-  //   try {
-  //     await client.pairing.delete({ topic, reason })
-  //   } catch (error) {
-  //     logger.warn('Error deleting WalletConnect session', error)
-  //   }
-  // }
-  // for (const topic of client.pairing.pending.topics) {
-  //   try {
-  //     await client.pairing.pending.delete(topic, reason)
-  //   } catch (error) {
-  //     logger.warn('Error deleting WalletConnect session', error)
-  //   }
-  // }
-
-  // Finally, disconnect from the relayer to kill the websocket connection
-  // try {
-  //   await client.relayer.provider.disconnect()
-  // } catch (error) {
-  //   logger.warn('Error disconnection form WalletConnect relayer', error)
-  // }
 
   logger.debug('WalletConnect client disconnected')
 }

@@ -1,10 +1,9 @@
-import { useDispatch, useSelector } from 'react-redux'
-import { RootState } from 'src/app/rootReducer'
+import { useAppDispatch, useAppSelector } from 'src/app/hooks'
 import { Fade } from 'src/components/animation/Fade'
 import { Button, transparentButtonStyles } from 'src/components/buttons/Button'
-import CloseIcon from 'src/components/icons/close.svg'
+import { XIcon } from 'src/components/icons/X'
 import { Box } from 'src/components/layout/Box'
-import { useAccountLockStatus } from 'src/features/pincode/pincode'
+import { useAccountLockStatus } from 'src/features/password/password'
 import { WalletConnectStatus } from 'src/features/walletConnect/types'
 import { getPeerName } from 'src/features/walletConnect/utils'
 import { useWalletConnectModal } from 'src/features/walletConnect/WalletConnectModal'
@@ -20,9 +19,10 @@ import { mq } from 'src/styles/mediaQueries'
 import { Stylesheet } from 'src/styles/types'
 
 export function WalletConnectStatusBox() {
-  const { address, isUnlocked } = useAccountLockStatus()
-  const status = useSelector((s: RootState) => s.walletConnect.status)
-  const session = useSelector((s: RootState) => s.walletConnect.session)
+  const isUnlocked = useAccountLockStatus()
+  const address = useAppSelector((s) => s.wallet.address)
+  const status = useAppSelector((s) => s.walletConnect.status)
+  const session = useAppSelector((s) => s.walletConnect.session)
 
   const isActive = status !== WalletConnectStatus.Disconnected
   const isSessionPending = session && status === WalletConnectStatus.SessionPending
@@ -70,7 +70,7 @@ export function WalletConnectStatusBox() {
     color = Color.textWarning
   }
 
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const showWalletConnectModal = useWalletConnectModal()
 
   const onClickText = () => {
@@ -104,7 +104,7 @@ export function WalletConnectStatusBox() {
             {(isReqPending || isSessionPending) && (
               <Box margin="1em 0 0 0">
                 <Button
-                  color={Color.altGrey}
+                  color={Color.primaryWhite}
                   size="xs"
                   onClick={onClickDeny}
                   margin="0 1.2em 0 0"
@@ -119,7 +119,7 @@ export function WalletConnectStatusBox() {
             )}
           </Box>
           <button onClick={onClickDisconnect} title="Disconnect" css={style.closeButton}>
-            <img src={CloseIcon} css={style.closeIcon} alt="Close" />
+            <XIcon styles={style.closeIcon} />
           </button>
         </Box>
       </Fade>

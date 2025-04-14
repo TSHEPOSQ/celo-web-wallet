@@ -1,4 +1,4 @@
-import type { SessionTypes } from '@walletconnect/types'
+import { type WalletKitTypes } from '@reown/walletkit'
 
 export interface WalletConnectUriForm {
   uri: string
@@ -23,18 +23,18 @@ export enum SessionStatus {
 
 export interface PendingSession {
   status: SessionStatus.Pending
-  data: SessionTypes.Proposal
+  data: WalletKitTypes.SessionProposal
 }
 
 export interface SettledSession {
   status: SessionStatus.Settled
-  data: SessionTypes.Settled
+  data: WalletKitTypes.SessionProposal
   startTime: number
 }
 
 export type WalletConnectSession = PendingSession | SettledSession
 
-export enum WalletConnectMethods {
+export enum WalletConnectMethod {
   accounts = 'eth_accounts',
   signTransaction = 'eth_signTransaction',
   sendTransaction = 'eth_sendTransaction',
@@ -43,4 +43,11 @@ export enum WalletConnectMethods {
   personalSign = 'personal_sign',
   personalDecrypt = 'personal_decrypt',
   computeSharedSecret = 'personal_computeSharedSecret',
+}
+
+export enum WalletConnectError {
+  unsupportedJsonRpc = 'unsupported_json_rpc',
+  unsupportedChains = 'unsupported_chains',
+  missingOrInvalid = 'missing_or_invalid',
+  notApproved = 'not_approved',
 }

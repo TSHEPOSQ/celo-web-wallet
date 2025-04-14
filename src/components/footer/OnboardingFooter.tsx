@@ -2,6 +2,7 @@ import { TextLink } from 'src/components/buttons/TextLink'
 import { AboutWalletLink } from 'src/components/footer/AboutWallet'
 import { Box } from 'src/components/layout/Box'
 import { config } from 'src/config'
+import { VALORA_URL } from 'src/consts'
 import { DownloadDesktopButton } from 'src/features/download/DownloadDesktopModal'
 import { Color } from 'src/styles/Color'
 import { mq } from 'src/styles/mediaQueries'
@@ -9,28 +10,30 @@ import { Stylesheet } from 'src/styles/types'
 
 export function OnboardingFooter() {
   return (
-    <Box align="center" justify="center" styles={style.container}>
-      <Box align="center" justify="center">
-        <AboutWalletLink styles={style.anchor} />
-        <span>-</span>
-        {!config.isElectron && (
-          <>
-            <DownloadDesktopButton styles={style.anchor} />
-            <span>-</span>
-          </>
-        )}
-        <TextLink link="https://valoraapp.com" styles={style.anchor}>
-          Valora Mobile App
-        </TextLink>
-        <span css={style.desktopOnly}>-</span>
-        <TextLink
-          link="https://github.com/celo-tools/celo-web-wallet"
-          styles={[style.anchor, style.desktopOnly]}
-        >
-          View Source
-        </TextLink>
+    <footer>
+      <Box align="center" justify="center" styles={style.container}>
+        <Box align="center" justify="center">
+          <AboutWalletLink styles={style.anchor} />
+          <span>-</span>
+          {!config.isElectron && (
+            <>
+              <DownloadDesktopButton styles={style.anchor} />
+              <span>-</span>
+            </>
+          )}
+          <TextLink link={VALORA_URL} styles={style.anchor}>
+            Valora Mobile App
+          </TextLink>
+          <span css={style.desktopOnly}>-</span>
+          <TextLink
+            link="https://github.com/celo-tools/celo-web-wallet"
+            styles={[style.anchor, style.desktopOnly]}
+          >
+            View Source
+          </TextLink>
+        </Box>
       </Box>
-    </Box>
+    </footer>
   )
 }
 

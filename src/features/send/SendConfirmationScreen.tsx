@@ -1,57 +1,60 @@
 import { BigNumber } from 'ethers'
 import { useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { RootState } from 'src/app/rootReducer'
+import { useAppDispatch } from 'src/app/hooks'
 import { Address } from 'src/components/Address'
+import { Fade } from 'src/components/animation/Fade'
 import { Button } from 'src/components/buttons/Button'
+import { HrDivider } from 'src/components/HrDivider'
 import SendPaymentIcon from 'src/components/icons/send_payment.svg'
+import WarningIcon from 'src/components/icons/warning.svg'
 import { Box } from 'src/components/layout/Box'
 import { ScreenContentFrame } from 'src/components/layout/ScreenContentFrame'
 import { MoneyValue } from 'src/components/MoneyValue'
 import { estimateFeeActions } from 'src/features/fees/estimateFee'
 import { FeeHelpIcon } from 'src/features/fees/FeeHelpIcon'
 import { useFee } from 'src/features/fees/utils'
+import { useIsAddressContract } from 'src/features/send/addressContractCheck'
 import {
   createTransferTx,
   getTokenTransferType,
   sendTokenActions,
   sendTokenSagaName,
 } from 'src/features/send/sendToken'
+import { useTokens } from 'src/features/tokens/hooks'
+import { isNativeTokenAddress } from 'src/features/tokens/utils'
+import { useFlowTransaction } from 'src/features/txFlow/hooks'
 import { txFlowCanceled } from 'src/features/txFlow/txFlowSlice'
 import { TxFlowType } from 'src/features/txFlow/types'
 import { useTxFlowStatusModals } from 'src/features/txFlow/useTxFlowStatusModals'
-import { useTokens } from 'src/features/wallet/utils'
 import { Color } from 'src/styles/Color'
 import { Font } from 'src/styles/fonts'
 import { mq } from 'src/styles/mediaQueries'
 import { Stylesheet } from 'src/styles/types'
-import { isNativeToken, NativeTokenId } from 'src/tokens'
 import { logger } from 'src/utils/logger'
 
 export function SendConfirmationScreen() {
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const navigate = useNavigate()
 
   const tokens = useTokens()
-  const tx = useSelector((state: RootState) => state.txFlow.transaction)
+  const tx = useFlowTransaction()
 
   useEffect(() => {
     // Make sure we belong on this screen
-    if (!tx || tx.type !== TxFlowType.Send) {
+    if (tx?.type !== TxFlowType.Send) {
       navigate('/send')
       return
     }
-    const { tokenId, recipient, amountInWei } = tx.params
+
+    const { tokenAddress, recipient, amountInWei } = tx.params
     const type = getTokenTransferType(tx.params)
-    if (isNativeToken(tokenId)) {
-      const txToken = tokenId as NativeTokenId
-      dispatch(estimateFeeActions.trigger({ txs: [{ type }], txToken }))
+    if (isNativeTokenAddress(tokenAddress)) {
+      dispatch(estimateFeeActions.trigger({ txs: [{ type }], txToken: tokenAddress }))
     } else {
       // There are no gas pre-computes for non-native tokens, need to get real tx to estimate
-      const token = tokens[tokenId]
-      const txRequestP = createTransferTx(token, recipient, BigNumber.from(amountInWei))
-      txRequestP
+      const token = tokens[tokenAddress]
+      createTransferTx(token, recipient, BigNumber.from(amountInWei))
         .then((txRequest) =>
           dispatch(
             estimateFeeActions.trigger({ txs: [{ type, tx: txRequest }], forceGasEstimation: true })
@@ -61,11 +64,17 @@ export function SendConfirmationScreen() {
     }
   }, [tx])
 
-  if (!tx || tx.type !== TxFlowType.Send) return null
+  const isRecipientContract = useIsAddressContract(
+    tx?.type === TxFlowType.Send ? tx.params.recipient : undefined
+  )
+
+  if (tx?.type !== TxFlowType.Send) return null
   const params = tx.params
-  const txToken = tokens[params.tokenId]
+  const txToken = tokens[params.tokenAddress]
 
   const { amount, total, feeAmount, feeCurrency, feeEstimates } = useFee(params.amountInWei)
+  // Only show total if it's relevant b.c. fee currency and token match
+  const showTotal = feeCurrency?.address === params.tokenAddress
 
   const onGoBack = () => {
     dispatch(sendTokenActions.reset())
@@ -94,6 +103,15 @@ export function SendConfirmationScreen() {
       <div css={style.content}>
         <h1 css={Font.h2Green}>Review Payment</h1>
 
+        <Fade show={isRecipientContract}>
+          <Box align="center" styles={{ ...style.inputRow, ...style.warningBox }} justify="between">
+            <img src={WarningIcon} width="23px" height="20px" />
+            <div css={style.warningText}>
+              Warning: this recipient address is a contract, not a simple account.
+            </div>
+          </Box>
+        </Fade>
+
         <Box align="center" styles={style.inputRow} justify="between">
           <label css={style.labelCol}>To</label>
           <Box direction="row" align="center" justify="end" styles={style.valueCol}>
@@ -115,12 +133,7 @@ export function SendConfirmationScreen() {
           </Box>
         </Box>
 
-        <Box
-          direction="row"
-          styles={{ ...style.inputRow, ...style.bottomBorder }}
-          align="end"
-          justify="between"
-        >
+        <Box direction="row" styles={style.inputRow} align="end" justify="between">
           <Box
             direction="row"
             justify="between"
@@ -133,7 +146,7 @@ export function SendConfirmationScreen() {
           </Box>
           {feeAmount && feeCurrency ? (
             <Box justify="end" align="end" styles={style.valueCol}>
-              <label>+</label>
+              {showTotal && <label>+</label>}
               <MoneyValue
                 amountInWei={feeAmount}
                 token={feeCurrency}
@@ -147,20 +160,30 @@ export function SendConfirmationScreen() {
           )}
         </Box>
 
-        <Box direction="row" styles={style.inputRow} justify="between">
-          <label css={[style.labelCol, style.totalLabel]}>Total</label>
-          <Box justify="end" align="end" styles={style.valueCol}>
-            <MoneyValue amountInWei={total} token={txToken} baseFontSize={1.2} fontWeight={500} />
-          </Box>
-        </Box>
+        {showTotal && (
+          <>
+            <HrDivider styles={style.inputRow} />
+            <Box direction="row" styles={style.inputRow} justify="between">
+              <label css={[style.labelCol, style.totalLabel]}>Total</label>
+              <Box justify="end" align="end" styles={style.valueCol}>
+                <MoneyValue
+                  amountInWei={total}
+                  token={txToken}
+                  baseFontSize={1.2}
+                  fontWeight={500}
+                />
+              </Box>
+            </Box>
+          </>
+        )}
 
         <Box direction="row" justify="between" margin="3em 0 0 0">
           <Button
             type="button"
             size="m"
-            color={Color.altGrey}
+            color={Color.primaryWhite}
             onClick={onGoBack}
-            disabled={isWorking || !feeAmount}
+            disabled={isWorking}
             margin="0 2em 0 0"
             width="5em"
           >
@@ -188,8 +211,11 @@ const style: Stylesheet = {
   },
   inputRow: {
     marginBottom: '1.4em',
+    [mq[1024]]: {
+      marginBottom: '1.7em',
+    },
     [mq[1200]]: {
-      marginBottom: '1.6em',
+      marginBottom: '2em',
     },
   },
   labelCol: {
@@ -215,8 +241,15 @@ const style: Stylesheet = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
-  bottomBorder: {
-    paddingBottom: '1.25em',
-    borderBottom: `1px solid ${Color.borderMedium}`,
+  warningBox: {
+    background: Color.fillWarning,
+    padding: '0.6em 0.8em',
+    borderRadius: 6,
+    opacity: 0.95,
+  },
+  warningText: {
+    ...Font.body2,
+    lineHeight: '1.4em',
+    marginLeft: '0.8em',
   },
 }

@@ -1,5 +1,5 @@
 import { BigNumber, BigNumberish } from 'ethers'
-import { RootState } from 'src/app/rootReducer'
+import { appSelect } from 'src/app/appSelect'
 import { batchCall } from 'src/blockchain/batchCall'
 import { getContract } from 'src/blockchain/contracts'
 import { CeloContract } from 'src/config'
@@ -9,7 +9,7 @@ import { updateProposals } from 'src/features/governance/governanceSlice'
 import { Proposal, ProposalStage, VoteValue } from 'src/features/governance/types'
 import { createMonitoredSaga } from 'src/utils/saga'
 import { isStale } from 'src/utils/time'
-import { call, put, select } from 'typed-redux-saga'
+import { call, put } from 'typed-redux-saga'
 
 type QueueRaw = [BigNumberish[], BigNumberish[]] //IDs then upvotes
 // proposer, deposit, timestamp, txLength, url
@@ -22,7 +22,7 @@ interface FetchProposalsParams {
 }
 
 function* fetchProposals({ force }: FetchProposalsParams) {
-  const { proposals, lastUpdated } = yield* select((state: RootState) => state.governance)
+  const { proposals, lastUpdated } = yield* appSelect((state) => state.governance)
 
   if (
     force ||
@@ -95,7 +95,7 @@ export async function fetchCurrentProposals(): Promise<Proposal[]> {
     })
   }
 
-  const descriptionsP = proposals.map((p) => fetchProposalDescription(p.url))
+  const descriptionsP = proposals.map((p) => fetchProposalDescription(p))
   const descriptions = await Promise.all(descriptionsP)
   for (let i = 0; i < numProps; i++) {
     proposals[i].description = descriptions[i]

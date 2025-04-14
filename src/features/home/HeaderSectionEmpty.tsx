@@ -4,7 +4,7 @@ import { useFundWalletModal } from 'src/components/FundWalletModal'
 import Mail from 'src/components/icons/mail.svg'
 import { Box } from 'src/components/layout/Box'
 import { useAddressQrCodeModal } from 'src/features/qr/QrCodeModal'
-import { useWalletAddress } from 'src/features/wallet/utils'
+import { useWalletAddress } from 'src/features/wallet/hooks'
 import { Color } from 'src/styles/Color'
 import { Font } from 'src/styles/fonts'
 import { Stylesheet } from 'src/styles/types'
@@ -24,7 +24,7 @@ export function HeaderSectionEmpty() {
 
   return (
     <Box direction="column">
-      <h1 css={style.header}>Welcome to your Celo wallet!</h1>
+      <h1 css={style.header}>Welcome to your Othello wallet!</h1>
 
       <Box direction="column">
         <Box direction="row" align="end">

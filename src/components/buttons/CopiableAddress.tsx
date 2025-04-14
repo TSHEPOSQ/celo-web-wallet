@@ -1,17 +1,16 @@
 import { ClickToCopy } from 'src/components/buttons/ClickToCopy'
 import { Styles } from 'src/styles/types'
-import { shortenAddress } from 'src/utils/addresses'
+import { capitalizeAddress, shortenAddress } from 'src/utils/addresses'
 
 interface ButtonProps {
-  address: string
+  address: Address
   length: 'short' | 'full'
   styles?: Styles
 }
 
 export function CopiableAddress(props: ButtonProps) {
   const { address, length, styles } = props
-  const text =
-    length === 'full' ? address.toUpperCase() : shortenAddress(address, true).toUpperCase()
+  const text = length === 'full' ? capitalizeAddress(address) : shortenAddress(address, true, true)
 
   return <ClickToCopy text={text} copyText={address} styles={styles} />
 }

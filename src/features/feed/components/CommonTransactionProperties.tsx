@@ -1,15 +1,17 @@
 import { getContract, getContractName } from 'src/blockchain/contracts'
-import { Address, useCopyAddress } from 'src/components/Address'
+import { Address } from 'src/components/Address'
 import { Button } from 'src/components/buttons/Button'
 import { TextLink } from 'src/components/buttons/TextLink'
 import { Box } from 'src/components/layout/Box'
 import { MoneyValue } from 'src/components/MoneyValue'
 import { CeloContract, config } from 'src/config'
+import { useAddContactModal } from 'src/features/contacts/AddContactModal'
 import { TransactionProperty } from 'src/features/feed/components/TransactionPropertyGroup'
+import { txReviewStyles } from 'src/features/feed/components/txReviewStyles'
 import { getFeeFromConfirmedTx } from 'src/features/fees/utils'
 import { CeloTransaction } from 'src/features/types'
-import { Stylesheet } from 'src/styles/types'
 import { CELO } from 'src/tokens'
+import { useClipboardSet } from 'src/utils/clipboard'
 import { logger } from 'src/utils/logger'
 
 export function TransactionStatusProperty({ tx }: { tx: CeloTransaction }) {
@@ -17,9 +19,9 @@ export function TransactionStatusProperty({ tx }: { tx: CeloTransaction }) {
 
   return (
     <TransactionProperty label="Status">
-      <div css={style.value}>{`Confirmed at ${time}`} </div>
-      <div css={style.value}>{date} </div>
-      <div css={[style.value, style.link]}>
+      <div css={txReviewStyles.value}>{`Confirmed at ${time}`} </div>
+      <div css={txReviewStyles.value}>{date} </div>
+      <div css={[txReviewStyles.value, txReviewStyles.link]}>
         <TextLink link={`${config.blockscoutUrl}/tx/${tx.hash}`}>View on Celo Explorer</TextLink>
       </div>
     </TransactionProperty>
@@ -43,12 +45,12 @@ export function TransactionAmountProperty({ tx }: { tx: CeloTransaction }) {
   const { feeValue, feeCurrency } = getFeeFromConfirmedTx(tx)
   return (
     <TransactionProperty label="Amount">
-      <Box styles={style.value}>
-        <span css={style.amountLabel}>Value: </span>
+      <Box styles={txReviewStyles.value}>
+        <span css={txReviewStyles.amountLabel}>Value: </span>
         <MoneyValue amountInWei={tx.value} token={CELO} />
       </Box>
-      <Box styles={style.value}>
-        <span css={style.amountLabel}>Fee: </span>
+      <Box styles={txReviewStyles.value}>
+        <span css={txReviewStyles.amountLabel}>Fee: </span>
         <MoneyValue amountInWei={feeValue} token={feeCurrency} />
       </Box>
     </TransactionProperty>
@@ -59,8 +61,8 @@ export function TransactionFeeProperty({ tx }: { tx: CeloTransaction }) {
   const { feeValue, feeCurrency } = getFeeFromConfirmedTx(tx)
   return (
     <TransactionProperty label="Fee">
-      <Box styles={style.value}>
-        <span css={style.feeLabel}>Fee: </span>
+      <Box styles={txReviewStyles.value}>
+        <span css={txReviewStyles.feeLabel}>Fee: </span>
         <MoneyValue amountInWei={feeValue} token={feeCurrency} />
       </Box>
     </TransactionProperty>
@@ -68,14 +70,25 @@ export function TransactionFeeProperty({ tx }: { tx: CeloTransaction }) {
 }
 
 export function TransactionToAddressProperty({ tx }: { tx: CeloTransaction }) {
-  const onClickCopyButton = useCopyAddress(tx.to)
+  const onClickCopyButton = useClipboardSet(tx.to)
+  const onClickAddContact = useAddContactModal(tx.to)
   return (
     <TransactionProperty label="To Address">
-      <div css={style.value}>
+      <div css={txReviewStyles.value}>
         <Address address={tx.to} />
-        <Button size="xs" margin="1.1em 0 0 0" onClick={onClickCopyButton}>
-          Copy Address
-        </Button>
+        <Box align="center" margin="1.1em 0 0 0">
+          <Button
+            size="xs"
+            margin="0 1.2em 0 1px"
+            styles={txReviewStyles.actionButton}
+            onClick={onClickCopyButton}
+          >
+            Copy Address
+          </Button>
+          <Button size="xs" styles={txReviewStyles.actionButton} onClick={onClickAddContact}>
+            Add Contact
+          </Button>
+        </Box>
       </div>
     </TransactionProperty>
   )
@@ -85,14 +98,14 @@ export function TransactionContractProperty({ tx }: { tx: CeloTransaction }) {
   const contractDetails = getContractDetails(tx)
   return (
     <TransactionProperty label="Target Contract">
-      <Box styles={style.value}>
-        <div css={style.contractlabel}>Name: </div>
+      <Box styles={txReviewStyles.value}>
+        <div css={txReviewStyles.contractLabel}>Name: </div>
         <TextLink link={`${config.blockscoutUrl}/address/${tx.to}`}>
           {contractDetails.name || 'Unknown Contract'}
         </TextLink>
       </Box>
-      <Box styles={style.value}>
-        <div css={style.contractlabel}>Method: </div>
+      <Box styles={txReviewStyles.value}>
+        <div css={txReviewStyles.contractLabel}>Method: </div>
         <div>{contractDetails.method || 'Unknown Method'}</div>
       </Box>
     </TransactionProperty>
@@ -120,22 +133,4 @@ function getContractDetails(tx: CeloTransaction) {
     logger.warn('Unable to parse tx contract details', error)
     return details
   }
-}
-
-const style: Stylesheet = {
-  value: {
-    marginTop: '1em',
-  },
-  link: {
-    fontSize: '0.9em',
-  },
-  amountLabel: {
-    minWidth: '4em',
-  },
-  feeLabel: {
-    paddingRight: '1em',
-  },
-  contractlabel: {
-    minWidth: '4.5em',
-  },
 }

@@ -2,7 +2,13 @@ const { app, BrowserWindow, ipcMain, session, shell } = require('electron')
 const { autoUpdater } = require('electron-updater')
 
 const URL_SCHEME = 'celowallet'
-const ALLOWED_PERMISSIONS = ['clipboard-read', 'notifications', 'fullscreen', 'openExternal']
+const ALLOWED_PERMISSIONS = [
+  'clipboard-read',
+  'notifications',
+  'fullscreen',
+  'openExternal',
+  'persistent-storage',
+]
 
 let mainWindow
 let deeplinkUrl
@@ -12,7 +18,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1250,
     height: 760,
-    title: 'Celo Wallet',
+    title: 'Othello',
     webPreferences: {
       preload: false,
       nodeIntegration: true,
@@ -30,9 +36,22 @@ function createWindow() {
   mainWindow.removeMenu()
 
   // Open links in separate browser window
-  mainWindow.webContents.on('new-window', (e, url) => {
-    e.preventDefault()
-    shell.openExternal(url)
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  mainWindow.webContents.setZoomFactor(1.0)
+  mainWindow.webContents.setVisualZoomLevelLimits(1, 5)
+
+  mainWindow.webContents.on('zoom-changed', (event, zoomDirection) => {
+    const currentZoom = mainWindow.webContents.getZoomFactor()
+    if (zoomDirection === 'in') {
+      mainWindow.webContents.setZoomFactor(currentZoom + 0.1)
+    }
+    if (zoomDirection === 'out' && currentZoom > 0.2) {
+      mainWindow.webContents.setZoomFactor(currentZoom - 0.1)
+    }
   })
 
   // Load the root page of the app
@@ -61,7 +80,7 @@ function setCspHeader() {
         ...details.responseHeaders,
         // Should match header in /netlify/_headers and build.sh
         'Content-Security-Policy': [
-          "default-src 'self'; script-src 'self' 'sha256-a0xx6QQjQFEl3BVHxY4soTXMFurPf9rWKnRLQLOkzg4='; connect-src 'self' https://*.celowallet.app https://*.celo.org wss://walletconnect.celo.org https://*.celo-testnet.org https://api.github.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'self'",
+          "default-src 'self'; script-src 'self' 'sha256-a0xx6QQjQFEl3BVHxY4soTXMFurPf9rWKnRLQLOkzg4='; connect-src 'self' https://*.celowallet.app https://*.celo.org https://*.walletconnect.org wss://*.walletconnect.com wss://*.walletconnect.org https://api.github.com https://eth-mainnet.alchemyapi.io https://unstoppabledomains.g.alchemy.com https://cloudflare-ipfs.com; img-src 'self' data: https://cloudflare-ipfs.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
         ],
       },
     })

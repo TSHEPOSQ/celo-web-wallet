@@ -1,7 +1,8 @@
-import { Contract } from 'ethers'
+import { Contract, utils } from 'ethers'
 import { ABI as AccountsAbi } from 'src/blockchain/ABIs/accounts'
 import { ABI as ElectionAbi } from 'src/blockchain/ABIs/election'
 import { ABI as Erc20Abi } from 'src/blockchain/ABIs/erc20'
+import { ABI as Erc721Abi } from 'src/blockchain/ABIs/erc721'
 import { ABI as EscrowAbi } from 'src/blockchain/ABIs/escrow'
 import { ABI as ExchangeAbi } from 'src/blockchain/ABIs/exchange'
 import { ABI as GoldTokenAbi } from 'src/blockchain/ABIs/goldToken'
@@ -12,7 +13,7 @@ import { ABI as StableTokenAbi } from 'src/blockchain/ABIs/stableToken'
 import { ABI as ValidatorsAbi } from 'src/blockchain/ABIs/validators'
 import { getSigner } from 'src/blockchain/signer'
 import { CeloContract, config } from 'src/config'
-import { areAddressesEqual } from 'src/utils/addresses'
+import { areAddressesEqual, normalizeAddress } from 'src/utils/addresses'
 
 let contractCache: Partial<Record<CeloContract, Contract>> = {}
 let tokenContractCache: Partial<Record<string, Contract>> = {} // token address to contract
@@ -28,13 +29,22 @@ export function getContract(c: CeloContract) {
   return contract
 }
 
+export function getErc20Contract(tokenAddress: Address) {
+  return getTokenContract(tokenAddress, Erc20Abi)
+}
+
+export function getErc721Contract(tokenAddress: Address) {
+  return getTokenContract(tokenAddress, Erc721Abi)
+}
+
 // Search for token contract by address
-export function getTokenContract(tokenAddress: string) {
-  const cachedContract = tokenContractCache[tokenAddress]
+function getTokenContract(tokenAddress: Address, abi: string) {
+  const normalizedAddr = normalizeAddress(tokenAddress)
+  const cachedContract = tokenContractCache[normalizedAddr]
   if (cachedContract) return cachedContract
   const signer = getSigner().signer
-  const contract = new Contract(tokenAddress, Erc20Abi, signer)
-  tokenContractCache[tokenAddress] = contract
+  const contract = new Contract(normalizedAddr, abi, signer)
+  tokenContractCache[normalizedAddr] = contract
   return contract
 }
 
@@ -48,6 +58,7 @@ function getContractAbi(c: CeloContract) {
       return EscrowAbi
     case CeloContract.Exchange:
     case CeloContract.ExchangeEUR:
+    case CeloContract.ExchangeBRL:
       return ExchangeAbi
     case CeloContract.GoldToken:
       return GoldTokenAbi
@@ -59,6 +70,7 @@ function getContractAbi(c: CeloContract) {
       return SortedOraclesAbi
     case CeloContract.StableToken:
     case CeloContract.StableTokenEUR:
+    case CeloContract.StableTokenBRL:
       return StableTokenAbi
     case CeloContract.Validators:
       return ValidatorsAbi
@@ -68,14 +80,14 @@ function getContractAbi(c: CeloContract) {
 }
 
 // Search for core contract by address
-export function getContractByAddress(address: string): Contract | null {
+export function getContractByAddress(address: Address): Contract | null {
   const name = getContractName(address)
   if (name) return getContract(name)
   else return null
 }
 
 // Search for core contract name by address
-export function getContractName(address: string): CeloContract | null {
+export function getContractName(address: Address): CeloContract | null {
   if (!address) return null
   const contractNames = Object.keys(config.contractAddresses) as Array<CeloContract> // Object.keys loses types
   for (const name of contractNames) {
@@ -85,6 +97,17 @@ export function getContractName(address: string): CeloContract | null {
     }
   }
   return null
+}
+
+let erc721Interface: utils.Interface
+
+// Normally, interfaces are retrieved through the getContract() function
+// but ERC721 is an exception because no core celo contracts use it
+export function getErc721AbiInterface() {
+  if (!erc721Interface) {
+    erc721Interface = new utils.Interface(Erc721Abi)
+  }
+  return erc721Interface
 }
 
 // Necessary if the signer changes, as in after a logout

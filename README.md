@@ -1,6 +1,8 @@
-# Celo Wallet For Web and Desktop
+# Othello Wallet
 
-A lightweight, self-sovereign wallet for the Celo network. Manage small accounts [on the web](https://celowallet.app) or large ones [on your desktop.](https://github.com/celo-tools/celo-web-wallet/releases) Fully compatible with Ledger hardware.
+A lightweight, self-sovereign wallet for the Celo network. Manage small accounts [on the web](https://celowallet.app) or large ones [on your desktop.](https://github.com/celo-tools/celo-web-wallet/releases).
+
+**Note**: This wallet is not currently under active development. Only security updates will be released.
 
 ## Desktop Downloads
 
@@ -14,9 +16,8 @@ See the [FAQ](FAQ.md) for more details about common questions.
 
 This wallet uses [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity). Current bundle hashes:
 
-* Main bundle: `bundle.js -> sha256-t8vSAR+0d7UoltV/rFdHyk5/+xuJIwyUTYd7sdJ30mc=`
-* Optional Ledger bundle: `bundle-ledger.js -> sha256-ECxa7Br9SgZ0z5kHrFZg7s3ttxHQJDGpNOUtC0ohC6o=`
-* Optional WalletConnect bundle: `bundle-walletconnect.js -> sha256-5Omtb33Q2utV8L01lUXGFJIuSrpzlYeFoQvnSUBZWrk=`
+* Main bundle: `bundle.js -> sha256-wjOt4/rxupRmwC5pCPtkt50P2Zq2dwirX6suzfcjnxg=`
+* Optional Ledger bundle: `bundle-ledger.js -> sha256-y7j3fytyX6vGMzLlXD5NBwndy4e3vzW/krmDodztN18=`
 
 Advanced users can verify the source integrity by comparing the hashes in their page source to these values.
 
@@ -47,7 +48,6 @@ yarn electron:dev
 ## Contributing
 
 For small contributions such as bug fixes or style tweaks, please open a Pull Request.
-For new features, please create an issue to start a discussion on [Discord](https://discord.com/channels/600834479145353243/812471799585439794).
 
 ## License
 

@@ -1,15 +1,16 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
-import { PairPriceUpdate, QuoteCurrency, TokenPriceHistory } from 'src/features/tokenPrice/types'
-import { NativeTokenId } from 'src/tokens'
+import { persistReducer } from 'redux-persist'
+import storage from 'redux-persist/lib/storage'
+import { BaseCurrencyPriceHistory, PairPriceUpdate } from 'src/features/tokenPrice/types'
 
 interface TokenPrices {
   // Base currency to quote currency to price list
-  prices: Partial<Record<NativeTokenId, Partial<Record<QuoteCurrency, TokenPriceHistory>>>>
+  byBaseAddress: BaseCurrencyPriceHistory
 }
 
 export const tokenPriceInitialState: TokenPrices = {
   // More tokens can be added here over time as needed
-  prices: {},
+  byBaseAddress: {},
 }
 
 const tokenPriceSlice = createSlice({
@@ -19,14 +20,25 @@ const tokenPriceSlice = createSlice({
     updatePairPrices: (state, action: PayloadAction<PairPriceUpdate[]>) => {
       for (const ppu of action.payload) {
         const { baseCurrency, quoteCurrency, prices } = ppu
-        state.prices[baseCurrency] = {
-          ...state.prices[baseCurrency],
+        state.byBaseAddress[baseCurrency] = {
+          ...state.byBaseAddress[baseCurrency],
           [quoteCurrency]: prices,
         }
       }
     },
+    resetTokenPrices: () => tokenPriceInitialState,
   },
 })
 
-export const { updatePairPrices } = tokenPriceSlice.actions
-export const tokenPriceReducer = tokenPriceSlice.reducer
+export const { updatePairPrices, resetTokenPrices } = tokenPriceSlice.actions
+const tokenPriceReducer = tokenPriceSlice.reducer
+
+const persistConfig = {
+  key: 'tokenPrice',
+  storage: storage,
+  whitelist: ['byBaseAddress'],
+}
+export const persistedTokenPriceReducer = persistReducer<ReturnType<typeof tokenPriceReducer>>(
+  persistConfig,
+  tokenPriceReducer
+)

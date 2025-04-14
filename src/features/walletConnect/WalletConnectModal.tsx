@@ -1,8 +1,8 @@
-import type { SessionTypes } from '@walletconnect/types'
+import { WalletKitTypes } from '@reown/walletkit'
 import { useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { RootState } from 'src/app/rootReducer'
+import { useAppDispatch, useAppSelector } from 'src/app/hooks'
 import { Button } from 'src/components/buttons/Button'
+import { TextButton } from 'src/components/buttons/TextButton'
 import { TextLink } from 'src/components/buttons/TextLink'
 import { CheckmarkInElipseIcon } from 'src/components/icons/Checkmark'
 import WalletConnectIcon from 'src/components/icons/logos/wallet_connect.svg'
@@ -20,10 +20,10 @@ import {
   WalletConnectUriForm,
 } from 'src/features/walletConnect/types'
 import {
+  clearWalletConnectStorage,
   getExpiryTime,
   getPeerName,
   getPeerUrl,
-  getPermissionList,
   getStartTime,
   rpcMethodToLabel,
   validateWalletConnectForm,
@@ -50,7 +50,7 @@ export function useWalletConnectModal() {
   const { showModalWithContent, closeModal } = useModal()
   return () => {
     showModalWithContent({
-      head: 'WalletConnect (Beta)',
+      head: 'WalletConnect',
       content: <WalletConnectModal close={closeModal} />,
       headIcon: <Icon />,
     })
@@ -66,7 +66,7 @@ interface Props {
 }
 
 function WalletConnectModal({ close }: Props) {
-  const { status, session, request, error } = useSelector((s: RootState) => s.walletConnect)
+  const { status, session, request, error } = useAppSelector((s) => s.walletConnect)
 
   return (
     <>
@@ -77,7 +77,7 @@ function WalletConnectModal({ close }: Props) {
         <ViewSession session={session} close={close} />
       )}
       {status === WalletConnectStatus.RequestPending && (
-        <ReviewRequest session={session} request={request} close={close} />
+        <ReviewRequest session={session} sessionRequest={request} close={close} />
       )}
       {status === WalletConnectStatus.RequestActive && <LoadingIndicator text="Working..." />}
       {status === WalletConnectStatus.RequestComplete && <RequestComplete close={close} />}
@@ -94,13 +94,13 @@ function Icon() {
 }
 
 function ConnectionForm() {
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
 
   const onSubmit = () => {
     dispatch(initializeWcClient(values.uri))
   }
 
-  const { values, errors, handleChange, handleBlur, handleSubmit, setValues } =
+  const { values, handleChange, handleBlur, handleSubmit, setValues } =
     useCustomForm<WalletConnectUriForm>(initialValues, onSubmit, validateWalletConnectForm)
 
   const onClickPaste = async () => {
@@ -110,10 +110,21 @@ function ConnectionForm() {
     }
   }
 
+  const onClickReset = () => {
+    dispatch(resetWcClient())
+    clearWalletConnectStorage()
+  }
+
   return (
     <form onSubmit={handleSubmit}>
       <Box direction="column" align="center">
-        <h3 css={style.h3}>Copy the WalletConnect session info and paste it here to connect.</h3>
+        <h3 css={style.h3}>Copy the WalletConnect session link and paste it here to connect.</h3>
+        <h3 css={style.h4}>
+          Having trouble?{' '}
+          <TextButton onClick={onClickReset} styles={Font.linkLight}>
+            Reset WalletConnect
+          </TextButton>
+        </h3>
         <Box direction="row" align="center" margin="1.5em 0 0 0">
           <TextInput
             name="uri"
@@ -121,8 +132,9 @@ function ConnectionForm() {
             onBlur={handleBlur}
             value={values.uri}
             placeholder="wc:0123..."
+            autoFocus={true}
             inputStyles={style.uriInput}
-            {...errors['uri']}
+            // {...errors['uri']}
           />
           {isClipboardReadSupported() && (
             <Button
@@ -138,7 +150,7 @@ function ConnectionForm() {
             />
           )}
         </Box>
-        <Button size="s" type="submit" margin="1.8em 0 0.25em 0" height={42}>
+        <Button size="s" type="submit" margin="1.25em 0 0.25em 0" height={42}>
           Connect
         </Button>
       </Box>
@@ -162,7 +174,7 @@ function ReviewSession({ session }: { session: WalletConnectSession | null }) {
     throw new Error('Invalid WalletConnect session for review')
   }
 
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const onClickApprove = () => {
     dispatch(approveWcSession())
   }
@@ -175,16 +187,18 @@ function ReviewSession({ session }: { session: WalletConnectSession | null }) {
 
   return (
     <Box direction="column" align="center">
-      <h3 css={style.h3}>{`${peerName} would like to connect to your wallet`}</h3>
-      <label css={style.label}>Requested permissions:</label>
-      <div css={style.details}>{getPermissionList(session)}</div>
+      <h3
+        css={style.h3}
+      >{`${peerName} would like to connect to your wallet. No transactions will be made without your confirmation.`}</h3>
+      {/* <label css={style.label}>Requested permissions:</label>
+      <div css={style.details}>{getPermissionList(session)}</div> */}
       {peerUrl && (
         <TextLink link={peerUrl} styles={style.dappUrl}>
           {trimToLength(peerUrl, 70)}
         </TextLink>
       )}
       <Box direction="row" margin="2em 0 0.25em 0">
-        <Button size="s" margin="0 1.5em 0 0" onClick={onClickDeny} color={Color.altGrey}>
+        <Button size="s" margin="0 1.5em 0 0" onClick={onClickDeny} color={Color.primaryWhite}>
           Deny
         </Button>
         <Button size="s" onClick={onClickApprove}>
@@ -200,7 +214,7 @@ function ViewSession({ session, close }: { session: WalletConnectSession | null 
     throw new Error('Invalid WalletConnect session to view')
   }
 
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const onClickOkay = () => {
     close()
   }
@@ -220,17 +234,24 @@ function ViewSession({ session, close }: { session: WalletConnectSession | null 
         <div css={[style.details, { marginRight: '1em' }]}>Connected since:</div>
         <div css={style.details}>{start}</div>
       </Box>
-      <Box align="center">
-        <div css={[style.details, { marginRight: '1em' }]}>Session expires:</div>
-        <div css={style.details}>{expiry}</div>
-      </Box>
+      {expiry && (
+        <Box align="center">
+          <div css={[style.details, { marginRight: '1em' }]}>Session expires:</div>
+          <div css={style.details}>{expiry}</div>
+        </Box>
+      )}
       {peerUrl && (
         <TextLink link={peerUrl} styles={style.dappUrl}>
           {trimToLength(peerUrl, 70)}
         </TextLink>
       )}
       <Box direction="row" margin="2em 0 0.25em 0">
-        <Button size="s" margin="0 1.5em 0 0" onClick={onClickDisconnect} color={Color.altGrey}>
+        <Button
+          size="s"
+          margin="0 1.5em 0 0"
+          onClick={onClickDisconnect}
+          color={Color.primaryWhite}
+        >
           Disconnect
         </Button>
         <Button size="s" onClick={onClickOkay}>
@@ -243,19 +264,22 @@ function ViewSession({ session, close }: { session: WalletConnectSession | null 
 
 function ReviewRequest({
   session,
-  request,
+  sessionRequest,
   close,
 }: {
   session: WalletConnectSession | null
-  request: SessionTypes.RequestEvent | null
+  sessionRequest: WalletKitTypes.SessionRequest | null
 } & Props) {
-  if (session?.status !== SessionStatus.Settled || !request?.request) {
-    throw new Error('Invalid WalletConnect request for review')
+  const walletRequest = sessionRequest?.params.request
+  if (session?.status !== SessionStatus.Settled || !walletRequest) {
+    // throw new Error('Invalid WalletConnect request for review')
+    return null
   }
 
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const onClickApprove = () => {
     dispatch(approveWcRequest())
+    close()
   }
   const onClickDeny = () => {
     dispatch(rejectWcRequest())
@@ -264,19 +288,19 @@ function ReviewRequest({
 
   const peerName = getPeerName(session)
   const peerUrl = getPeerUrl(session)
-  const requestMethod = rpcMethodToLabel(request.request.method)
+  const requestMethod = rpcMethodToLabel(walletRequest.method)
 
   return (
     <Box direction="column" align="center">
       <h3 css={style.h3}>{`${peerName} would like to ${requestMethod}`}</h3>
-      <RequestDetails requestEvent={request} />
+      <RequestDetails requestEvent={sessionRequest} />
       {peerUrl && (
         <TextLink link={peerUrl} styles={style.dappUrl}>
           {trimToLength(peerUrl, 70)}
         </TextLink>
       )}
       <Box direction="row" margin="1.5em 0 0.25em 0">
-        <Button size="s" margin="0 1.5em 0 0" onClick={onClickDeny} color={Color.altGrey}>
+        <Button size="s" margin="0 1.5em 0 0" onClick={onClickDeny} color={Color.primaryWhite}>
           Deny
         </Button>
         <Button size="s" onClick={onClickApprove}>
@@ -302,16 +326,16 @@ function RequestComplete({ close }: Props) {
 }
 
 function RequestError({ message, close }: { message: string | null } & Props) {
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const onClickDismiss = () => {
     dispatch(dismissWcRequest())
     close()
   }
   return (
     <Box direction="column" align="center">
-      <h3 css={style.h3}>There was a problem with a WalletConnect request event</h3>
+      <h3 css={style.h3}>There was a problem with the WalletConnect request</h3>
       <p css={style.error}>{message ?? 'Unknown error'}</p>
-      <Button size="s" margin="2em 0 0.5em 0" onClick={onClickDismiss} color={Color.altGrey}>
+      <Button size="s" margin="2em 0 0.5em 0" onClick={onClickDismiss} color={Color.primaryWhite}>
         Dismiss
       </Button>
     </Box>
@@ -319,7 +343,7 @@ function RequestError({ message, close }: { message: string | null } & Props) {
 }
 
 function SessionError({ message, close }: { message: string | null } & Props) {
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const onClickDismiss = () => {
     dispatch(resetWcClient())
     close()
@@ -332,7 +356,7 @@ function SessionError({ message, close }: { message: string | null } & Props) {
       <h3 css={style.h3}>Looks like something went wrong</h3>
       <p css={style.error}>{message ?? 'Unknown error'}</p>
       <Box direction="row" margin="2em 0 0.5em 0">
-        <Button size="s" margin="0 1.5em 0 0" onClick={onClickDismiss} color={Color.altGrey}>
+        <Button size="s" margin="0 1.5em 0 0" onClick={onClickDismiss} color={Color.primaryWhite}>
           Dismiss
         </Button>
         <Button size="s" onClick={onClickNewSession}>
@@ -347,6 +371,11 @@ const style: Stylesheet = {
   h3: {
     ...modalStyles.h3,
     maxWidth: '18em',
+  },
+  h4: {
+    ...modalStyles.p,
+    maxWidth: '18em',
+    marginTop: '0.5em',
   },
   uriInput: {
     width: '14em',
@@ -386,6 +415,6 @@ const style: Stylesheet = {
   spinnerContainer: {
     marginTop: '1.5em',
     transform: 'scale(0.8)',
-    opacity: 0.9,
+    opacity: 0.85,
   },
 }

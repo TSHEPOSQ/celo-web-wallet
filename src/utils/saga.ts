@@ -1,9 +1,10 @@
 import { createAction, createReducer, PayloadActionCreator } from '@reduxjs/toolkit'
 import { call, delay, Effect, put, race, take } from 'redux-saga/effects'
-import { logger } from './logger'
+import { logger } from 'src/utils/logger'
+import { errorToString } from 'src/utils/validation'
 
 /**
- * A convinence utility to create a saga and trigger action
+ * A convenience utility to create a saga and trigger action
  * Use to create simple sagas, for more complex ones use createMonitoredSaga.
  * Note: the wrapped saga this returns must be added to rootSaga.ts
  */
@@ -24,9 +25,7 @@ export function createSaga<SagaParams = void>(saga: (...args: any[]) => any, nam
 
   return {
     wrappedSaga,
-    actions: {
-      trigger: triggerAction,
-    },
+    trigger: triggerAction,
   }
 }
 
@@ -43,7 +42,7 @@ export interface SagaActions {
   cancel: PayloadActionCreator<any>
   progress: PayloadActionCreator<any>
   error: PayloadActionCreator<any>
-  reset: PayloadActionCreator<any>
+  reset: PayloadActionCreator<void>
 }
 
 export interface SagaState {
@@ -57,8 +56,8 @@ interface MonitoredSagaOptions {
 }
 
 /**
- * A convinence utility to create a wrapped saga that handles common concerns like
- * triger watching, cancel watching, timeout, progress updates, and success/fail updates.
+ * A convenience utility to create a wrapped saga that handles common concerns like
+ * trigger watching, cancel watching, timeout, progress updates, and success/fail updates.
  * Use to create complex sagas that need more coordination with the UI.
  * Note: the wrapped saga and reducer this returns must be added to rootSaga.ts
  */
@@ -121,9 +120,10 @@ export function createMonitoredSaga<SagaParams = void>(
         }
 
         yield put(statusAction(SagaStatus.Success))
-      } catch (error) {
+        logger.debug(`${name} finished`)
+      } catch (error: any) {
         logger.error(`${name} error`, error)
-        yield put(errorAction(error.toString()))
+        yield put(errorAction(errorToString(error)))
       }
     }
   }

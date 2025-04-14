@@ -1,8 +1,7 @@
 import { BigNumber } from 'ethers'
 import { useEffect, useMemo } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { RootState } from 'src/app/rootReducer'
+import { useAppDispatch, useAppSelector } from 'src/app/hooks'
 import { Button } from 'src/components/buttons/Button'
 import { TextLink } from 'src/components/buttons/TextLink'
 import { RadioBoxRow } from 'src/components/input/RadioBoxRow'
@@ -10,8 +9,8 @@ import { SelectInput } from 'src/components/input/SelectInput'
 import { Box } from 'src/components/layout/Box'
 import { ScreenContentFrame } from 'src/components/layout/ScreenContentFrame'
 import { useNavHintModal } from 'src/components/modal/useNavHintModal'
-import { useSagaStatus } from 'src/components/modal/useSagaStatusModal'
 import { Spinner } from 'src/components/Spinner'
+import { useVoterBalances } from 'src/features/balances/hooks'
 import {
   fetchProposalsActions,
   fetchProposalsSagaName,
@@ -24,10 +23,11 @@ import {
   VoteValue,
   voteValueToLabel,
 } from 'src/features/governance/types'
+import { useFlowTransaction } from 'src/features/txFlow/hooks'
 import { txFlowStarted } from 'src/features/txFlow/txFlowSlice'
 import { TxFlowTransaction, TxFlowType } from 'src/features/txFlow/types'
-import { useIsVoteSignerAccount, useVoterBalances } from 'src/features/wallet/utils'
-import { VotingForBanner } from 'src/features/wallet/VotingForBanner'
+import { VotingForBanner } from 'src/features/wallet/accounts/VotingForBanner'
+import { useIsVoteSignerAccount } from 'src/features/wallet/hooks'
 import { Color } from 'src/styles/Color'
 import { Font } from 'src/styles/fonts'
 import { mq } from 'src/styles/mediaQueries'
@@ -36,6 +36,7 @@ import { fromWei } from 'src/utils/amount'
 import { SagaStatus } from 'src/utils/saga'
 import { trimToLength } from 'src/utils/string'
 import { useCustomForm } from 'src/utils/useCustomForm'
+import { useSagaStatus } from 'src/utils/useSagaStatus'
 
 const initialValues: GovernanceVoteParams = {
   proposalId: '',
@@ -56,13 +57,13 @@ enum Status {
 }
 
 export function GovernanceFormScreen() {
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const navigate = useNavigate()
 
-  const tx = useSelector((state: RootState) => state.txFlow.transaction)
+  const tx = useFlowTransaction()
   const { balances, voterBalances } = useVoterBalances()
   const isVoteSignerAccount = useIsVoteSignerAccount()
-  const proposals = useSelector((state: RootState) => state.governance.proposals)
+  const proposals = useAppSelector((state) => state.governance.proposals)
 
   useEffect(() => {
     dispatch(fetchProposalsActions.trigger({}))

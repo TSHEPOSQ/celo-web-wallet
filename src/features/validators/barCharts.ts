@@ -1,5 +1,6 @@
 import { BigNumber, BigNumberish } from 'ethers'
 import { BARCHART_MIN_SHOW_AMOUNT } from 'src/consts'
+import { Balances } from 'src/features/balances/types'
 import {
   GroupVotes,
   StakeActionType,
@@ -7,15 +8,12 @@ import {
   ValidatorGroup,
 } from 'src/features/validators/types'
 import { findValidatorGroupName, getStakingMaxAmount } from 'src/features/validators/utils'
-import { Balances } from 'src/features/wallet/types'
 import { ChartDataColors, ChartDataColorsLighter, Color } from 'src/styles/Color'
-import { CELO } from 'src/tokens'
-import { shortenAddress } from 'src/utils/addresses'
 import { BigNumberMax, BigNumberMin, fromWeiRounded } from 'src/utils/amount'
 
-// Just for convinience / shortness cause this file has lots of conversions
+// Just for convenience / shortness cause this file has lots of conversions
 function fromWei(value: BigNumberish) {
-  return parseFloat(fromWeiRounded(value, CELO, true))
+  return parseFloat(fromWeiRounded(value))
 }
 
 export function getSummaryChartData(
@@ -80,10 +78,10 @@ function getChartData(
   for (let i = 0; i < votedGroups.length; i++) {
     const groupAddr = votedGroups[i]
     const vote = adjustedVotes[groupAddr]
-    if (BigNumber.from(vote.active).gt(BARCHART_MIN_SHOW_AMOUNT)) {
+    if (BigNumber.from(vote.active).gte(BARCHART_MIN_SHOW_AMOUNT)) {
       chartData.push(createGroupDataPoint(groups, groupAddr, vote.active, i))
     }
-    if (BigNumber.from(vote.pending).gt(BARCHART_MIN_SHOW_AMOUNT)) {
+    if (BigNumber.from(vote.pending).gte(BARCHART_MIN_SHOW_AMOUNT)) {
       chartData.push(createGroupDataPoint(groups, groupAddr, vote.pending, i, true))
     }
     totalVoted = totalVoted.add(vote.pending).add(vote.active)
@@ -113,7 +111,7 @@ function createGroupDataPoint(
   index: number,
   isPending?: boolean
 ) {
-  let name = findValidatorGroupName(groups, groupAddr) || shortenAddress(groupAddr, true)
+  let name = findValidatorGroupName(groups, groupAddr, 'address')
   const colorIndex = index % ChartDataColors.length
   let color = ChartDataColors[colorIndex]
   if (isPending) {

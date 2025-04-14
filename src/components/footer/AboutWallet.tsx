@@ -28,22 +28,21 @@ export function AboutWalletLink({ styles }: { styles: Styles }) {
 function AboutWalletModal() {
   return (
     <Box direction="column" align="center" styles={style.container}>
-      <p style={style.text}>
-        The Celo Wallet is a free, open source wallet for the{' '}
-        <TextLink link="https://celo.org">Celo network</TextLink>. It was created by{' '}
-        <TextLink link="https://twitter.com/RossyWrote">J M Rossy</TextLink> and{' '}
-        <TextLink link="https://www.linkedin.com/in/brianschwalm/">Brian Schwalm</TextLink>.
+      <p css={style.text}>
+        Othello (formerly Celo Wallet) is a free, open source wallet for the Celo network. It was
+        created by <TextLink link="https://twitter.com/RossyWrote">J M Rossy</TextLink>. It is not
+        affiliated with the Celo Foundation and is not currently under active development. Only
+        security updates will be made.
       </p>
-      <p style={style.text}>
+      <p css={style.text}>
         The source code for the wallet can be found{' '}
         <TextLink link="https://github.com/celo-tools/celo-web-wallet">on Github</TextLink> and
         includes answers to{' '}
         <TextLink link="https://github.com/celo-tools/celo-web-wallet/blob/master/FAQ.md">
-          Frequently Asked Questions
+          Frequently Asked Questions.
         </TextLink>
-        .
       </p>
-      <p style={style.version}>{`Version: ${config.version}`}</p>
+      <p css={style.version}>{`Version: ${config.version}`}</p>
     </Box>
   )
 }

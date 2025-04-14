@@ -1,30 +1,30 @@
 import { useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { RootState } from 'src/app/rootReducer'
+import { useAppDispatch, useAppSelector } from 'src/app/hooks'
 import { ClickToCopy } from 'src/components/buttons/ClickToCopy'
 import { CloseButton } from 'src/components/buttons/CloseButton'
 import { Box } from 'src/components/layout/Box'
 import { GenericTransactionReview } from 'src/features/feed/components/GenericTransactionReview'
 import { GovernanceVoteReview } from 'src/features/feed/components/GovernanceVoteReview'
+import { NftTransferReview } from 'src/features/feed/components/NftTransferReview'
 import { StakeTokenReview } from 'src/features/feed/components/StakeTokenReview'
 import { TokenExchangeReview } from 'src/features/feed/components/TokenExchangeReview'
 import { TokenTransferReview } from 'src/features/feed/components/TokenTransferReview'
 import { TransactionProperty } from 'src/features/feed/components/TransactionPropertyGroup'
 import { openTransaction } from 'src/features/feed/feedSlice'
 import { getTransactionDescription } from 'src/features/feed/transactionDescription'
+import { useTokens } from 'src/features/tokens/hooks'
+import { TokenMap } from 'src/features/tokens/types'
 import { CeloTransaction, TransactionType } from 'src/features/types'
-import { useTokens } from 'src/features/wallet/utils'
 import { Color } from 'src/styles/Color'
 import { Font } from 'src/styles/fonts'
 import { mq, useIsMobile } from 'src/styles/mediaQueries'
 import { Stylesheet } from 'src/styles/types'
-import { Tokens } from 'src/tokens'
 
 export function TransactionReview() {
   const navigate = useNavigate()
-  const dispatch = useDispatch()
-  const { transactions, openTransaction: openTx } = useSelector((s: RootState) => s.feed)
+  const dispatch = useAppDispatch()
+  const { transactions, openTransaction: openTx } = useAppSelector((s) => s.feed)
   const tokens = useTokens()
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export function TransactionReview() {
   )
 }
 
-function getContentByTxType(tx: CeloTransaction, tokens: Tokens) {
+function getContentByTxType(tx: CeloTransaction, tokens: TokenMap) {
   const description = getTransactionDescription(tx, tokens, false)
 
   if (
@@ -108,6 +108,13 @@ function getContentByTxType(tx: CeloTransaction, tokens: Tokens) {
     return {
       description,
       content: <GovernanceVoteReview tx={tx} />,
+    }
+  }
+
+  if (tx.type === TransactionType.NftTransfer) {
+    return {
+      description,
+      content: <NftTransferReview tx={tx} />,
     }
   }
 
@@ -165,7 +172,7 @@ const style: Stylesheet = {
   closeButton: {
     position: 'relative',
     top: 2,
-    img: {
+    svg: {
       filter: 'brightness(0) invert(1)',
     },
     ':hover': {

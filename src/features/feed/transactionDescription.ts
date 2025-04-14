@@ -1,8 +1,13 @@
+import { TokenMap } from 'src/features/tokens/types'
+import { getTokenById } from 'src/features/tokens/utils'
 import { CeloTransaction, TransactionType } from 'src/features/types'
-import { getTokenById, Tokens } from 'src/tokens'
 import { trimToLength } from 'src/utils/string'
 
-export function getTransactionDescription(tx: CeloTransaction, tokens: Tokens, useComment = true) {
+export function getTransactionDescription(
+  tx: CeloTransaction,
+  tokens: TokenMap,
+  useComment = true
+) {
   if (
     tx.type === TransactionType.StableTokenTransfer ||
     tx.type === TransactionType.CeloNativeTransfer ||
@@ -58,6 +63,10 @@ export function getTransactionDescription(tx: CeloTransaction, tokens: Tokens, u
 
   if (tx.type === TransactionType.GovernanceVote) {
     return 'Governance Vote'
+  }
+
+  if (tx.type === TransactionType.NftTransfer) {
+    return 'Nft Sent'
   }
 
   return 'Transaction Sent'

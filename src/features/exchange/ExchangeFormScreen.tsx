@@ -1,25 +1,29 @@
 import { ChangeEvent, useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { RootState } from 'src/app/rootReducer'
+import { useAppDispatch, useAppSelector } from 'src/app/hooks'
 import { Button } from 'src/components/buttons/Button'
 import { TextButton } from 'src/components/buttons/TextButton'
 import { AmountAndCurrencyInput } from 'src/components/input/AmountAndCurrencyInput'
 import { Box } from 'src/components/layout/Box'
 import { ScreenContentFrame } from 'src/components/layout/ScreenContentFrame'
 import { MoneyValue } from 'src/components/MoneyValue'
+import { config } from 'src/config'
+import { useBalances } from 'src/features/balances/hooks'
+import { getTokenBalance } from 'src/features/balances/utils'
 import { fetchExchangeRateActions } from 'src/features/exchange/exchangeRate'
 import { validate } from 'src/features/exchange/exchangeToken'
 import { ExchangeTokenParams } from 'src/features/exchange/types'
 import { useExchangeValues } from 'src/features/exchange/utils'
 import { PriceChartCelo } from 'src/features/tokenPrice/PriceChartCelo'
+import { isStableTokenAddress } from 'src/features/tokens/utils'
+import { useFlowTransaction } from 'src/features/txFlow/hooks'
 import { txFlowStarted } from 'src/features/txFlow/txFlowSlice'
 import { TxFlowTransaction, TxFlowType } from 'src/features/txFlow/types'
 import { Color } from 'src/styles/Color'
 import { Font } from 'src/styles/fonts'
 import { mq } from 'src/styles/mediaQueries'
 import { Stylesheet } from 'src/styles/types'
-import { CELO, isStableToken, NativeTokenId, NativeTokens } from 'src/tokens'
+import { CELO, cUSD, NativeTokensByAddress } from 'src/tokens'
 import { amountFieldFromWei, amountFieldToWei, fromWeiRounded } from 'src/utils/amount'
 import { useCustomForm } from 'src/utils/useCustomForm'
 
@@ -29,17 +33,18 @@ interface ExchangeTokenForm extends Omit<ExchangeTokenParams, 'amountInWei'> {
 
 const initialValues: ExchangeTokenForm = {
   amount: '',
-  fromTokenId: NativeTokenId.cUSD,
-  toTokenId: NativeTokenId.CELO,
+  fromTokenAddress: cUSD.address,
+  toTokenAddress: CELO.address,
 }
 
 export function ExchangeFormScreen() {
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const navigate = useNavigate()
-  const balances = useSelector((state: RootState) => state.wallet.balances)
-  const toCeloRates = useSelector((state: RootState) => state.exchange.toCeloRates)
-  const tx = useSelector((state: RootState) => state.txFlow.transaction)
-  const txSizeLimitEnabled = useSelector((state: RootState) => state.settings.txSizeLimitEnabled)
+  const balances = useBalances()
+  const tx = useFlowTransaction()
+  const toCeloRates = useAppSelector((state) => state.exchange.toCeloRates)
+  const txSizeLimitEnabled = useAppSelector((state) => state.settings.txSizeLimitEnabled)
+  const tokens = NativeTokensByAddress
 
   useEffect(() => {
     dispatch(fetchExchangeRateActions.trigger({ force: false }))
@@ -51,7 +56,7 @@ export function ExchangeFormScreen() {
   }
 
   const validateForm = (values: ExchangeTokenForm) =>
-    validate(amountFieldToWei(values), balances, txSizeLimitEnabled)
+    validate(amountFieldToWei(values), balances, tokens, txSizeLimitEnabled)
 
   const {
     values,
@@ -71,86 +76,46 @@ export function ExchangeFormScreen() {
 
   const onSelectToken = (isFromToken: boolean) => (event: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target
-    const targetField = isFromToken ? 'fromTokenId' : 'toTokenId'
-    const otherField = isFromToken ? 'toTokenId' : 'fromTokenId'
-    if (isStableToken(value)) {
-      setValues({ ...values, [name]: value, [otherField]: NativeTokenId.CELO })
+    const targetField = isFromToken ? 'fromTokenAddress' : 'toTokenAddress'
+    const otherField = isFromToken ? 'toTokenAddress' : 'fromTokenAddress'
+    if (isStableTokenAddress(value)) {
+      setValues({ ...values, [name]: value, [otherField]: CELO.address })
     } else {
-      const newTokenId = isStableToken(values[targetField])
+      const newTokenAddress = isStableTokenAddress(values[targetField])
         ? values[targetField]
-        : NativeTokenId.cUSD
-      setValues({ ...values, [name]: value, [otherField]: newTokenId })
+        : cUSD.address
+      setValues({ ...values, [name]: value, [otherField]: newTokenAddress })
     }
     resetErrors()
   }
 
   const onUseMax = () => {
-    const tokenId = values.fromTokenId
-    const token = balances.tokens[tokenId]
-    const maxAmount = fromWeiRounded(token.value, token, true)
+    const tokenAddress = values.fromTokenAddress
+    const token = tokens[tokenAddress]
+    const balance = getTokenBalance(balances, token)
+    const maxAmount = fromWeiRounded(balance, token.decimals)
     setValues({ ...values, amount: maxAmount })
     resetErrors()
   }
 
   const { to, rate } = useExchangeValues(
     values.amount,
-    values.fromTokenId,
-    values.toTokenId,
-    balances,
+    values.fromTokenAddress,
+    values.toTokenAddress,
+    tokens,
     toCeloRates,
     false
   )
-  const stableTokenId = values.fromTokenId === CELO.id ? values.toTokenId : values.fromTokenId
-  const stableToken = NativeTokens[stableTokenId]
-  const toAmount = fromWeiRounded(to.weiAmount, to.token, true)
+  const stableTokenAddress =
+    values.fromTokenAddress === CELO.address ? values.toTokenAddress : values.fromTokenAddress
+  const stableToken = tokens[stableTokenAddress]
+  const toAmount = fromWeiRounded(to.weiAmount, to.token.decimals)
 
   return (
     <ScreenContentFrame>
       <h2 css={Font.h2Green}>Make an Exchange</h2>
       <Box styles={style.containerBox}>
         <Box direction="column">
-          <form onSubmit={handleSubmit}>
-            <div css={style.inputRow}>
-              <Box direction="row" justify="between" align="start">
-                <label css={style.inputLabel}>From Currency</label>
-                <TextButton onClick={onUseMax} styles={style.maxAmountButton}>
-                  Use Max
-                </TextButton>
-              </Box>
-              <AmountAndCurrencyInput
-                tokenValue={values.fromTokenId}
-                onTokenSelect={onSelectToken(true)}
-                onTokenBlur={handleBlur}
-                amountValue={values.amount}
-                onAmountChange={handleChange}
-                onAmountBlur={handleBlur}
-                errors={errors}
-                tokenInputName="fromTokenId"
-                nativeTokensOnly={true}
-              />
-            </div>
-            <div css={style.inputRow}>
-              <label css={style.inputLabel}>To Currency</label>
-              <AmountAndCurrencyInput
-                tokenValue={values.toTokenId}
-                onTokenSelect={onSelectToken(false)}
-                onTokenBlur={handleBlur}
-                amountValue={toAmount}
-                onAmountChange={handleChange}
-                onAmountBlur={handleBlur}
-                errors={errors}
-                tokenInputName="toTokenId"
-                inputDisabled={true}
-                nativeTokensOnly={true}
-              />
-            </div>
-
-            <Button type="submit" size="m">
-              Continue
-            </Button>
-          </form>
-        </Box>
-        <Box direction="column" styles={style.chartColumn}>
           <Box direction="row" align="center" justify="center" styles={style.rateRow}>
             <label css={Font.inputLabel}>Current Rate</label>
             {rate.isReady ? (
@@ -174,13 +139,58 @@ export function ExchangeFormScreen() {
               <span css={style.valueText}>Loading...</span>
             )}
           </Box>
-          <PriceChartCelo
-            stableTokenId={stableTokenId}
-            showHeaderPrice={false}
-            containerCss={style.chartContainer}
-            height={200}
-          />
+          <form onSubmit={handleSubmit}>
+            <div css={style.inputRow}>
+              <Box direction="row" justify="between" align="start">
+                <label css={style.inputLabel}>From Currency</label>
+                <TextButton onClick={onUseMax} styles={style.maxAmountButton}>
+                  Use Max
+                </TextButton>
+              </Box>
+              <AmountAndCurrencyInput
+                tokenValue={values.fromTokenAddress}
+                onTokenSelect={onSelectToken(true)}
+                onTokenBlur={handleBlur}
+                amountValue={values.amount}
+                onAmountChange={handleChange}
+                onAmountBlur={handleBlur}
+                errors={errors}
+                tokenInputName="fromTokenAddress"
+                nativeTokensOnly={true}
+              />
+            </div>
+            <div css={style.inputRow}>
+              <label css={style.inputLabel}>To Currency</label>
+              <AmountAndCurrencyInput
+                tokenValue={values.toTokenAddress}
+                onTokenSelect={onSelectToken(false)}
+                onTokenBlur={handleBlur}
+                amountValue={toAmount}
+                amountName="toAmount"
+                onAmountChange={handleChange}
+                onAmountBlur={handleBlur}
+                errors={errors}
+                tokenInputName="toTokenAddress"
+                inputDisabled={true}
+                nativeTokensOnly={true}
+              />
+            </div>
+
+            <Button type="submit" size="m">
+              Continue
+            </Button>
+          </form>
         </Box>
+        {config.showPriceChart && (
+          <Box direction="column" styles={style.chartColumn}>
+            <PriceChartCelo
+              quoteTokenAddress={stableTokenAddress}
+              showHeaderPrice={false}
+              containerCss={style.chartContainer}
+              height={200}
+            />
+          </Box>
+        )}
       </Box>
     </ScreenContentFrame>
   )
@@ -238,8 +248,7 @@ const style: Stylesheet = {
   rateRow: {
     backgroundColor: Color.fillLighter,
     padding: '0.5em 1em',
-    marginBottom: '0.2em',
-    marginRight: '1.5em',
+    marginBottom: '1.5em',
     borderRadius: 6,
   },
   rateValue: {

@@ -15,21 +15,23 @@ export type SelectOptions = Array<SelectOption>
 export interface SelectInputProps {
   name: string
   autoComplete: boolean
-  width: string | number
-  height?: number // defaults to 40
   value: string | undefined
   options: SelectOptions
-  maxOptions?: number // max number of suggestions to show
-  allowRawOption?: boolean // user's input is included in select options
-  onBlur?: (event: ChangeEvent<HTMLInputElement>) => void
   onChange: (event: ChangeEvent<HTMLInputElement>) => void
-  error?: boolean
-  helpText?: string
+  onBlur?: (event: ChangeEvent<HTMLInputElement>) => void
   placeholder?: string
   disabled?: boolean
+  error?: boolean
+  helpText?: string
+  allowRawOption?: boolean // user's raw input sets value
+  maxOptions?: number // max number of suggestions to show
+  hideChevron?: boolean
+  width?: string | number // mandatory unless fillWidth is set
+  fillWidth?: boolean
+  height?: string | number // defaults to 40
   inputStyles?: Styles
-  renderDropdownOption?: (o: SelectOption) => ReactElement
-  renderDropdownValue?: (v: string) => ReactElement | null
+  renderSelectValue?: (v: string) => ReactElement | null // custom renderer for a selected value in faux input
+  renderDropdownOption?: (o: SelectOption) => ReactElement // custom renderer for dropdown line item
 }
 
 export function SelectInput(props: PropsWithChildren<SelectInputProps>) {
@@ -38,29 +40,40 @@ export function SelectInput(props: PropsWithChildren<SelectInputProps>) {
     autoComplete,
     value,
     options,
-    maxOptions,
-    allowRawOption,
-    onBlur,
     onChange,
-    helpText,
+    onBlur,
     placeholder,
     disabled,
+    helpText,
+    allowRawOption,
+    maxOptions,
+    hideChevron,
+    fillWidth,
     inputStyles,
     renderDropdownOption,
-    renderDropdownValue,
+    renderSelectValue,
   } = props
 
-  const initialInput = getDisplayValue(options, value)
-  const [inputValue, setInputValue] = useState(initialInput)
+  const initialInput = allowRawOption ? value : getDisplayValue(options, value)
+  const [inputValue, setInputValue] = useState(initialInput || '')
   const [showDropdown, setShowDropdown] = useState(false)
 
   useEffect(() => {
-    setInputValue(getDisplayValue(options, value, allowRawOption))
+    if (allowRawOption) {
+      setInputValue(value || '')
+    } else {
+      setInputValue(getDisplayValue(options, value))
+    }
   }, [value])
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setInputValue(event.target.value)
-    onChange({ target: { name, value: '' } } as any)
+    const value = event.target.value
+    if (allowRawOption) {
+      onChange({ target: { name, value } } as any)
+    } else {
+      setInputValue(value)
+      onChange({ target: { name, value: '' } } as any)
+    }
   }
 
   const handleClick = () => {
@@ -77,15 +90,19 @@ export function SelectInput(props: PropsWithChildren<SelectInputProps>) {
   }
 
   const filteredOptions = autoComplete
-    ? sortAndFilter(options, inputValue ?? '', maxOptions, allowRawOption)
+    ? sortAndFilter(options, inputValue ?? '', maxOptions)
     : options
 
   const formattedInputStyle = getInputStyles(props, inputValue, inputStyles)
 
   return (
-    <Box direction="column">
-      <div css={style.container} onBlur={handleBlur}>
-        {autoComplete ? (
+    <Box direction="column" styles={fillWidth ? style.containerFill : undefined}>
+      <div
+        css={fillWidth ? style.containerFill : style.container}
+        onBlur={handleBlur}
+        className="notranslate"
+      >
+        {autoComplete && (
           <>
             <input
               type="text"
@@ -95,25 +112,31 @@ export function SelectInput(props: PropsWithChildren<SelectInputProps>) {
               onClick={handleClick}
               onFocus={handleClick}
               onChange={handleChange}
-              autoComplete="off"
               placeholder={placeholder}
               disabled={disabled}
+              autoComplete="off" // Disable browser's autocomplete
             ></input>
-            <div css={style.chevronContainer}>
-              <ChevronIcon direction="s" height="8px" width="12px" />
-            </div>
+            {!hideChevron && (
+              <div css={style.chevronContainer}>
+                <ChevronIcon direction="s" height="8px" width="12px" />
+              </div>
+            )}
           </>
-        ) : (
+        )}
+
+        {!autoComplete && (
           // Tab index is required here to workaround a browser bug
           <div css={formattedInputStyle} onClick={handleClick} tabIndex={0}>
-            {(renderDropdownValue ? renderDropdownValue(inputValue) : inputValue) || placeholder}
-            <div css={style.chevronContainer}>
-              <ChevronIcon direction="s" height="8px" width="12px" />
-            </div>
+            {(renderSelectValue ? renderSelectValue(inputValue) : inputValue) || placeholder}
+            {!hideChevron && (
+              <div css={style.chevronContainer}>
+                <ChevronIcon direction="s" height="8px" width="12px" />
+              </div>
+            )}
           </div>
         )}
 
-        {showDropdown && (
+        {showDropdown && filteredOptions.length > 0 && (
           <div css={style.dropdownContainer}>
             {filteredOptions.map((o) => (
               <div
@@ -132,37 +155,34 @@ export function SelectInput(props: PropsWithChildren<SelectInputProps>) {
   )
 }
 
-function sortAndFilter(
-  options: SelectOptions,
-  input: string,
-  maxOptions?: number,
-  allowRawOption?: boolean
-) {
+function sortAndFilter(options: SelectOptions, input: string, maxOptions?: number) {
+  const formattedInput = input.trim().toLowerCase()
   const filtered = [...options]
-    .sort((a, b) => (a.display < b.display ? -1 : 1))
-    .filter((o) => o.display.toLowerCase().includes(input.toLowerCase()))
-  if (input && allowRawOption) {
-    filtered.unshift({ display: input, value: input })
-  }
+    .sort((a, b) => (a.display.toLowerCase() < b.display.toLowerCase() ? -1 : 1))
+    .filter(
+      (o) =>
+        o.display.toLowerCase().includes(formattedInput) ||
+        o.value.toLowerCase().includes(formattedInput)
+    )
   return maxOptions ? filtered.slice(0, maxOptions) : filtered
 }
 
-function getDisplayValue(options: SelectOptions, optionValue?: string, allowRawOption?: boolean) {
+function getDisplayValue(options: SelectOptions, optionValue?: string) {
   if (!optionValue) return ''
   const option = options.find((o) => o.value === optionValue)
   if (option && option.display) return option.display
-  else if (allowRawOption) return optionValue
   else return ''
 }
 
 function getInputStyles(props: SelectInputProps, inputValue: string, styleOverrides?: Styles) {
-  const { autoComplete, width, height, error, disabled } = props
+  const { autoComplete, width, fillWidth, height, error, disabled } = props
 
   const styleBase = {
     ...getSharedInputStyles(error),
     padding: '2px 10px',
-    width,
-    height: height ?? 40,
+    width: fillWidth ? '100%' : width,
+    height: height ? height : fillWidth ? 46 : 40,
+    boxSizing: fillWidth ? 'border-box' : undefined,
     ...styleOverrides,
   }
 
@@ -200,10 +220,14 @@ const style: Stylesheet = {
     position: 'relative',
     width: 'fit-content',
   },
+  containerFill: {
+    position: 'relative',
+    width: '100%',
+  },
   chevronContainer: {
     position: 'absolute',
     right: 14,
-    top: 15,
+    top: '30%',
     opacity: 0.75,
   },
   dropdownContainer: {

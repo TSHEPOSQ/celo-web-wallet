@@ -1,8 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
-import { createMigrate, persistReducer } from 'redux-persist'
-import autoMergeLevel2 from 'redux-persist/es/stateReconciler/autoMergeLevel2'
-import storage from 'redux-persist/lib/storage'
-import { CeloTransaction, TransactionMap } from 'src/features/types'
+import { CeloTransaction, TransactionMap, TransactionType } from 'src/features/types'
 
 export interface TransactionFeed {
   transactions: TransactionMap
@@ -24,6 +21,18 @@ const feedSlice = createSlice({
   name: 'feed',
   initialState: feedInitialState,
   reducers: {
+    setTransactions: (
+      state,
+      action: PayloadAction<{
+        txs: TransactionMap
+        lastBlockNumber: number
+      }>
+    ) => {
+      state.transactions = action.payload.txs
+      state.lastBlockNumber = action.payload.lastBlockNumber
+      state.lastUpdatedTime = null
+      state.openTransaction = null
+    },
     addTransactions: (
       state,
       action: PayloadAction<{
@@ -33,7 +42,7 @@ const feedSlice = createSlice({
       }>
     ) => {
       if (Object.keys(action.payload.txs).length > 0) {
-        state.transactions = { ...state.transactions, ...action.payload.txs }
+        state.transactions = mergeTransactions(state.transactions, action.payload.txs)
       }
       state.lastUpdatedTime = action.payload.lastUpdatedTime
       state.lastBlockNumber = action.payload.lastBlockNumber
@@ -58,7 +67,20 @@ const feedSlice = createSlice({
   },
 })
 
+function mergeTransactions(oldTxs: TransactionMap, newTxs: TransactionMap) {
+  // Hacking in a fix for the missing activate tx amounts here
+  // The placeholders have the right value but the 'official' tx history does not
+  // So modifying the tx info we get from blockscout
+  for (const tx of Object.values(newTxs)) {
+    if (tx.type === TransactionType.ValidatorActivateCelo && oldTxs[tx.hash]) {
+      tx.value = oldTxs[tx.hash].value
+    }
+  }
+  return { ...oldTxs, ...newTxs }
+}
+
 export const {
+  setTransactions,
   addTransactions,
   addPlaceholderTransaction,
   openTransaction,
@@ -66,32 +88,4 @@ export const {
   resetFeed,
 } = feedSlice.actions
 
-const feedReducer = feedSlice.reducer
-
-const migrations = {
-  // Typings don't work well for migrations:
-  // https://github.com/rt2zz/redux-persist/issues/1065
-  0: (state: any) => {
-    // Migration to reset feed due to schema change
-    return {
-      ...state,
-      transactions: {},
-      lastUpdatedTime: null,
-      lastBlockNumber: null,
-    }
-  },
-}
-
-const feedPersistConfig = {
-  key: 'feed',
-  storage,
-  stateReconciler: autoMergeLevel2,
-  whitelist: ['transactions', 'lastUpdatedTime', 'lastBlockNumber'],
-  version: 0, // -1 is default
-  migrate: createMigrate(migrations),
-}
-
-export const persistedFeedReducer = persistReducer<ReturnType<typeof feedReducer>>(
-  feedPersistConfig,
-  feedReducer
-)
+export const feedReducer = feedSlice.reducer

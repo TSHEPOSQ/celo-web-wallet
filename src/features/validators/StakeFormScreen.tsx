@@ -1,9 +1,7 @@
-import { BigNumber, utils } from 'ethers'
-import { Location } from 'history'
+import { BigNumber } from 'ethers'
 import { ChangeEvent, useEffect, useMemo } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { RootState } from 'src/app/rootReducer'
+import { useNavigate } from 'react-router-dom'
+import { useAppDispatch, useAppSelector } from 'src/app/hooks'
 import { Button } from 'src/components/buttons/Button'
 import { TextButton } from 'src/components/buttons/TextButton'
 import { BasicHelpIconModal, HelpIcon } from 'src/components/icons/HelpIcon'
@@ -14,6 +12,8 @@ import { Box } from 'src/components/layout/Box'
 import { ScreenContentFrame } from 'src/components/layout/ScreenContentFrame'
 import { useNavHintModal } from 'src/components/modal/useNavHintModal'
 import { StackedBarChart } from 'src/components/StackedBarChart'
+import { useVoterBalances } from 'src/features/balances/hooks'
+import { useFlowTransaction } from 'src/features/txFlow/hooks'
 import { txFlowStarted } from 'src/features/txFlow/txFlowSlice'
 import { TxFlowTransaction, TxFlowType } from 'src/features/txFlow/types'
 import { getResultChartData, getSummaryChartData } from 'src/features/validators/barCharts'
@@ -26,16 +26,21 @@ import {
   ValidatorGroup,
 } from 'src/features/validators/types'
 import { getStakingMaxAmount, getValidatorGroupName } from 'src/features/validators/utils'
-import { useIsVoteSignerAccount, useVoterBalances } from 'src/features/wallet/utils'
-import { VotingForBanner } from 'src/features/wallet/VotingForBanner'
+import { VotingForBanner } from 'src/features/wallet/accounts/VotingForBanner'
+import { useIsVoteSignerAccount } from 'src/features/wallet/hooks'
 import { Color } from 'src/styles/Color'
 import { Font } from 'src/styles/fonts'
 import { mq } from 'src/styles/mediaQueries'
 import { Stylesheet } from 'src/styles/types'
-import { CELO } from 'src/tokens'
-import { shortenAddress } from 'src/utils/addresses'
+import { isValidAddress, shortenAddress } from 'src/utils/addresses'
 import { amountFieldFromWei, amountFieldToWei, fromWeiRounded } from 'src/utils/amount'
 import { useCustomForm } from 'src/utils/useCustomForm'
+import { useLocationState } from 'src/utils/useLocationState'
+
+interface LocationState {
+  groupAddress: Address
+  action: StakeActionType
+}
 
 interface StakeTokenForm extends Omit<StakeTokenParams, 'amountInWei'> {
   amount: string
@@ -54,14 +59,15 @@ const radioBoxLabels = [
 ]
 
 export function StakeFormScreen() {
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const navigate = useNavigate()
-  const location = useLocation()
-  const tx = useSelector((state: RootState) => state.txFlow.transaction)
+  const locationState = useLocationState<LocationState>()
+
+  const tx = useFlowTransaction()
   const { balances, voterBalances } = useVoterBalances()
   const isVoteSignerAccount = useIsVoteSignerAccount()
-  const groups = useSelector((state: RootState) => state.validators.validatorGroups.groups)
-  const groupVotes = useSelector((state: RootState) => state.validators.groupVotes)
+  const groups = useAppSelector((state) => state.validators.validatorGroups.groups)
+  const groupVotes = useAppSelector((state) => state.validators.groupVotes)
 
   const onSubmit = (values: StakeTokenForm) => {
     dispatch(txFlowStarted({ type: TxFlowType.Stake, params: amountFieldToWei(values) }))
@@ -81,17 +87,18 @@ export function StakeFormScreen() {
     resetValues,
     resetErrors,
   } = useCustomForm<StakeTokenForm>(
-    getInitialValues(location, tx, groupVotes),
+    getInitialValues(locationState, tx, groupVotes),
     onSubmit,
     validateForm
   )
 
   // Keep form in sync with tx state
   useEffect(() => {
-    const initialValues = getInitialValues(location, tx, groupVotes)
+    const initialValues = getInitialValues(locationState, tx, groupVotes)
     resetValues(initialValues)
     // Ensure we have the info needed otherwise send user back
     if (!groups || !groups.length) {
+      // TODO find a way to avoid this, creates a bad UX
       navigate('/validators')
     }
   }, [tx])
@@ -115,7 +122,7 @@ export function StakeFormScreen() {
         groupVotes,
         values.groupAddress
       )
-      autoSetAmount = fromWeiRounded(maxAmount, CELO, true)
+      autoSetAmount = fromWeiRounded(maxAmount)
     } else {
       autoSetAmount = '0'
     }
@@ -130,7 +137,7 @@ export function StakeFormScreen() {
       groupVotes,
       values.groupAddress
     )
-    setValues({ ...values, amount: fromWeiRounded(maxAmount, CELO, true) })
+    setValues({ ...values, amount: fromWeiRounded(maxAmount) })
     resetErrors()
   }
 
@@ -163,11 +170,13 @@ export function StakeFormScreen() {
               <SelectInput
                 name="groupAddress"
                 autoComplete={true}
-                width="19em"
+                allowRawOption={true}
                 onChange={handleChange}
                 onBlur={handleBlur}
                 value={values.groupAddress}
                 options={selectOptions}
+                fillWidth={true}
+                hideChevron={true}
                 {...errors['groupAddress']}
               />
             </Box>
@@ -187,11 +196,10 @@ export function StakeFormScreen() {
 
             <Box direction="column" justify="end" align="start" margin="1.5em 0 0 0">
               <label css={style.inputLabel}>Amount</label>
-              <Box direction="row" align="center">
+              <Box direction="row" align="center" justify="between" styles={style.amountContainer}>
                 <NumberInput
-                  step="0.01"
-                  width="12em"
-                  margin="0 1.6em 0 0"
+                  width="14em"
+                  margin="0 1em 0 0"
                   name="amount"
                   onChange={handleChange}
                   onBlur={handleBlur}
@@ -213,17 +221,16 @@ export function StakeFormScreen() {
                 total={resultData.total}
                 showTotal={false}
                 showLabels={true}
-                width="20.25em"
+                width="23.5em"
               />
             </Box>
 
-            <Box direction="row" margin="2em 0 0 0">
+            <Box direction="row" margin="2em 0 0 0" justify="between">
               <Button
                 type="button"
                 size="m"
-                color={Color.altGrey}
+                color={Color.primaryWhite}
                 onClick={onGoBack}
-                margin="0 5.4em 0 0"
                 width="5em"
               >
                 Back
@@ -278,7 +285,7 @@ function HelpModal() {
 }
 
 function getInitialValues(
-  location: Location<any>,
+  locationState: LocationState | null,
   tx: TxFlowTransaction | null,
   groupVotes: GroupVotes
 ): StakeTokenForm {
@@ -286,15 +293,15 @@ function getInitialValues(
     return amountFieldFromWei(tx.params)
   }
 
-  const initialAction = location?.state?.action ?? initialValues.action
-  const groupAddress = location?.state?.groupAddress
+  const initialAction = locationState?.action ?? initialValues.action
+  const groupAddress = locationState?.groupAddress
   const initialGroup =
-    groupAddress && utils.isAddress(groupAddress) ? groupAddress : initialValues.groupAddress
+    groupAddress && isValidAddress(groupAddress) ? groupAddress : initialValues.groupAddress
 
   // Auto use pending when defaulting to activate
   const initialAmount =
     groupAddress && groupVotes[groupAddress] && initialAction === StakeActionType.Activate
-      ? fromWeiRounded(groupVotes[groupAddress].pending, CELO, true)
+      ? fromWeiRounded(groupVotes[groupAddress].pending)
       : initialValues.amount
 
   return {
@@ -331,7 +338,8 @@ const style: Stylesheet = {
   },
   content: {
     width: '100%',
-    maxWidth: '26em',
+    maxWidth: '23.5em',
+    paddingRight: '3em',
     paddingBottom: '1em',
   },
   inputLabel: {
@@ -340,6 +348,9 @@ const style: Stylesheet = {
   },
   radioBox: {
     justifyContent: 'flex-start',
+  },
+  amountContainer: {
+    width: '100%',
   },
   maxAmountButton: {
     fontWeight: 300,

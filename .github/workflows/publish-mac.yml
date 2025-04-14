@@ -1,0 +1,32 @@
+name: publish-mac
+on: workflow_dispatch
+
+jobs:
+  build-and-publish:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: yarn --immutable
+
+      - name: Build with webpack for electron
+        shell: bash
+        run: ./scripts/build.sh -n Mainnet -e
+        env:
+          ALCHEMY_KEY: ${{ secrets.ALCHEMY_KEY }}
+          WALLET_CONNECT_KEY: ${{ secrets.WALLET_CONNECT_KEY }}
+
+      - name: Build on Mac 
+        run: yarn electron-builder --mac --publish always
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK2 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          DISABLE_MULTIPART_DOWNLOADING: true

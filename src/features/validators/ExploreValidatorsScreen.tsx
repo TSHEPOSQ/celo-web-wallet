@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { RootState } from 'src/app/rootReducer'
+import { useAppDispatch, useAppSelector } from 'src/app/hooks'
 import { Button } from 'src/components/buttons/Button'
 import { CopiableAddress } from 'src/components/buttons/CopiableAddress'
 import { RefreshButton } from 'src/components/buttons/RefreshButton'
@@ -9,8 +8,7 @@ import { TextLink } from 'src/components/buttons/TextLink'
 import { CircleIcon } from 'src/components/icons/Circle'
 import { Box } from 'src/components/layout/Box'
 import { ScreenContentFrame } from 'src/components/layout/ScreenContentFrame'
-import { useSagaStatus } from 'src/components/modal/useSagaStatusModal'
-import { Table, TableColumn } from 'src/components/Table'
+import { Table, TableColumn } from 'src/components/table/Table'
 import {
   fetchValidatorsActions,
   fetchValidatorsSagaName,
@@ -26,10 +24,11 @@ import { Font } from 'src/styles/fonts'
 import { Stylesheet } from 'src/styles/types'
 import { formatNumberWithCommas } from 'src/utils/amount'
 import { SagaStatus } from 'src/utils/saga'
+import { useSagaStatus } from 'src/utils/useSagaStatus'
 
 export function ExploreValidatorsScreen() {
   const navigate = useNavigate()
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
 
   useEffect(() => {
     dispatch(fetchValidatorsActions.trigger({}))
@@ -49,7 +48,7 @@ export function ExploreValidatorsScreen() {
     'Something went wrong when finding validators, sorry! Please try again later.'
   )
 
-  const groups = useSelector((state: RootState) => state.validators.validatorGroups.groups)
+  const groups = useAppSelector((state) => state.validators.validatorGroups.groups)
 
   const data = useMemo(() => {
     return validatorGroupsToTableData(groups)
@@ -67,7 +66,13 @@ export function ExploreValidatorsScreen() {
             styles={style.refreshIcon}
           />
         </h1>
-        <Box direction="row" align="end" justify="between" margin="0 0 2em 0" styles={style.h3Row}>
+        <Box
+          direction="row"
+          align="end"
+          justify="between"
+          margin="2px 0 2em 0"
+          styles={style.h3Row}
+        >
           <h3 css={style.h3}>
             For more details, see{' '}
             <TextLink link="https://celo.org/validators/explore">celo.org</TextLink> or{' '}
@@ -161,7 +166,7 @@ function ExpandedRow({ row: group }: { row: ValidatorGroupTableRow }) {
   const { address, members } = group
   const sortedMembers = Object.values(members).sort((a, b) => b.status - a.status)
 
-  const onClickVote = (groupAddress: string) => {
+  const onClickVote = (groupAddress: Address) => {
     navigate('/stake', { state: { groupAddress } })
   }
 

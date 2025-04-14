@@ -1,8 +1,9 @@
 import { BigNumber } from 'ethers'
-import { RootState } from 'src/app/rootReducer'
+import { appSelect } from 'src/app/appSelect'
 import { getContract } from 'src/blockchain/contracts'
 import { isSignerSet } from 'src/blockchain/signer'
 import { CeloContract, config } from 'src/config'
+import { fetchBalancesActions } from 'src/features/balances/fetchBalances'
 import { addTransactions } from 'src/features/feed/feedSlice'
 import { isValidTransaction, parseTransaction } from 'src/features/feed/parseFeedTransaction'
 import {
@@ -11,57 +12,53 @@ import {
   BlockscoutTx,
   BlockscoutTxBase,
 } from 'src/features/feed/types'
-import { TransactionMap } from 'src/features/types'
-import { fetchBalancesActions } from 'src/features/wallet/fetchBalances'
-import { Balances } from 'src/features/wallet/types'
-import { NativeTokens, StableTokenIds, Token } from 'src/tokens'
-import { normalizeAddress } from 'src/utils/addresses'
+import { selectNftContracts } from 'src/features/nft/hooks'
+import { NftContractMap } from 'src/features/nft/types'
+import { addTokensByAddress } from 'src/features/tokens/addToken'
+import { selectTokens } from 'src/features/tokens/hooks'
+import { TokenMap } from 'src/features/tokens/types'
+import { TransactionMap, TransactionType } from 'src/features/types'
+import { saveFeedData } from 'src/features/wallet/manager'
+import { StableTokens } from 'src/tokens'
 import { queryBlockscout } from 'src/utils/blockscout'
+import { logger } from 'src/utils/logger'
 import { createMonitoredSaga } from 'src/utils/saga'
-import { call, delay, put, select } from 'typed-redux-saga'
+import { isStale } from 'src/utils/time'
+import { call, put } from 'typed-redux-saga'
 
 const QUERY_DEBOUNCE_TIME = 2000 // 2 seconds
-const POLL_DELAY = 10000 // 10 seconds
-
-// Triggers polling of feed fetching
-export function* feedAndBalancesFetchPoller() {
-  let i = 0
-  while (true) {
-    yield* delay(POLL_DELAY)
-    if (!isSignerSet()) continue
-    yield* put(fetchFeedActions.trigger())
-    if (i === 2) yield* put(fetchBalancesActions.trigger())
-    i = (i + 1) % 3
-  }
-}
 
 function* fetchFeed() {
-  const { address, balances } = yield* select((state: RootState) => state.wallet)
-  const lastUpdatedTime = yield* select((state: RootState) => state.feed.lastUpdatedTime)
-  const lastBlockNumber = yield* select((state: RootState) => state.feed.lastBlockNumber)
-
+  const address = yield* appSelect((state) => state.wallet.address)
   if (!address || !isSignerSet()) return
 
-  const now = Date.now()
-  if (lastUpdatedTime && now - lastUpdatedTime < QUERY_DEBOUNCE_TIME) return
+  const lastUpdatedTime = yield* appSelect((state) => state.feed.lastUpdatedTime)
+  if (!isStale(lastUpdatedTime, QUERY_DEBOUNCE_TIME)) return
+
+  const lastBlockNumber = yield* appSelect((state) => state.feed.lastBlockNumber)
+  const tokensByAddress = yield* selectTokens()
+  const nftContractsByAddress = yield* selectNftContracts()
 
   const { newTransactions, newLastBlockNumber } = yield* call(
     doFetchFeed,
     address,
-    balances,
+    tokensByAddress,
+    nftContractsByAddress,
     lastBlockNumber
   )
   yield* put(
     addTransactions({
       txs: newTransactions,
-      lastUpdatedTime: now,
+      lastUpdatedTime: Date.now(),
       lastBlockNumber: newLastBlockNumber,
     })
   )
 
-  if (Object.keys(newTransactions).length > 0) {
-    yield* put(fetchBalancesActions.trigger())
-  }
+  if (!Object.keys(newTransactions).length) return
+
+  yield* call(saveFeedData, address)
+  yield* call(addNewTokens, newTransactions, tokensByAddress)
+  yield* put(fetchBalancesActions.trigger())
 }
 
 export const {
@@ -71,10 +68,16 @@ export const {
   actions: fetchFeedActions,
 } = createMonitoredSaga(fetchFeed, 'fetchFeed')
 
-async function doFetchFeed(address: string, balances: Balances, lastBlockNumber: number | null) {
+async function doFetchFeed(
+  address: Address,
+  tokensByAddress: TokenMap,
+  nftContractsByAddress: NftContractMap,
+  lastBlockNumber: number | null
+) {
   const txList = await fetchTxsFromBlockscout(address, lastBlockNumber)
+
+  const exchangesByAddress = getExchangeAddresses()
   const abiInterfaces = getAbiInterfacesForParsing()
-  const { tokensByAddress, exchangesByAddress } = getTokenInfoForParsing(balances)
 
   const newTransactions: TransactionMap = {}
   let newLastBlockNumber = lastBlockNumber || 0
@@ -87,6 +90,7 @@ async function doFetchFeed(address: string, balances: Balances, lastBlockNumber:
       address,
       tokensByAddress,
       exchangesByAddress,
+      nftContractsByAddress,
       abiInterfaces
     )
     if (parsedTx) newTransactions[parsedTx.hash] = parsedTx
@@ -97,7 +101,7 @@ async function doFetchFeed(address: string, balances: Balances, lastBlockNumber:
   return { newTransactions, newLastBlockNumber }
 }
 
-async function fetchTxsFromBlockscout(address: string, lastBlockNumber: number | null) {
+async function fetchTxsFromBlockscout(address: Address, lastBlockNumber: number | null) {
   // TODO consider pagination here
 
   // First fetch the basic tx list, which includes outgoing token transfers
@@ -105,7 +109,7 @@ async function fetchTxsFromBlockscout(address: string, lastBlockNumber: number |
   if (lastBlockNumber) {
     txQueryUrl += `&startblock=${lastBlockNumber + 1}`
   }
-  const txListP = queryBlockscout<Array<BlockscoutTx>>(txQueryUrl)
+  const txList = await queryBlockscout<Array<BlockscoutTx>>(txQueryUrl)
 
   // The txlist query alone doesn't get all needed transactions
   // It excludes incoming token transfers so we need a second query to cover those
@@ -116,9 +120,7 @@ async function fetchTxsFromBlockscout(address: string, lastBlockNumber: number |
   if (lastBlockNumber) {
     tokenTxQueryUrl += `&startblock=${lastBlockNumber + 1}`
   }
-  const tokenTxListP = queryBlockscout<Array<BlockscoutTokenTransfer>>(tokenTxQueryUrl)
-
-  const [txList, tokenTxList] = await Promise.all([txListP, tokenTxListP])
+  const tokenTxList = await queryBlockscout<Array<BlockscoutTokenTransfer>>(tokenTxQueryUrl)
 
   // Create a map of hash to txs
   const txMap = new Map<string, BlockscoutTx>()
@@ -128,6 +130,10 @@ async function fetchTxsFromBlockscout(address: string, lastBlockNumber: number |
 
   //  Attach the token transfers to their parent txs in the first list
   for (const tx of tokenTxList) {
+    // Ignoring incoming NFT transfers for now
+    // TODO revisit this if incoming NFT parsing is needed
+    if (tx.tokenId || !tx.value) continue
+
     // If transfer doesn't have a corresponding tx from the first list, make a placeholder
     // Most common reason would be incoming token transfer
     if (!txMap.has(tx.hash)) {
@@ -143,19 +149,14 @@ async function fetchTxsFromBlockscout(address: string, lastBlockNumber: number |
   return txMap.values()
 }
 
-function getTokenInfoForParsing(balances: Balances) {
-  const tokensByAddress: Record<string, Token> = {} // Map of address to token info
-  for (const t of Object.values(balances.tokens)) {
-    tokensByAddress[normalizeAddress(t.address)] = t
-  }
-  const exchangesByAddress: Record<string, Token> = {} // Mento address to token info
-  for (const id of StableTokenIds) {
-    const token = NativeTokens[id]
+function getExchangeAddresses() {
+  const exchangesByAddress: TokenMap = {} // Mento address to token info
+  for (const token of StableTokens) {
     if (token.exchangeAddress) {
       exchangesByAddress[token.exchangeAddress] = token
     }
   }
-  return { tokensByAddress, exchangesByAddress }
+  return exchangesByAddress
 }
 
 function getAbiInterfacesForParsing(): AbiInterfaceMap {
@@ -201,5 +202,25 @@ function copyTx(tx: BlockscoutTxBase): BlockscoutTx {
     blockHash: tx.blockHash,
     cumulativeGasUsed: tx.cumulativeGasUsed,
     transactionIndex: tx.transactionIndex,
+  }
+}
+
+function* addNewTokens(newTransactions: TransactionMap, tokensByAddress: TokenMap) {
+  try {
+    const currentTokenAddrs = new Set<Address>(Object.keys(tokensByAddress))
+    const newTokenAddrs = new Set<Address>()
+    for (const tx of Object.values(newTransactions)) {
+      if (
+        (tx.type === TransactionType.OtherTokenTransfer ||
+          tx.type === TransactionType.OtherTokenApprove) &&
+        !currentTokenAddrs.has(tx.tokenId) // Note: tokenId is address
+      ) {
+        newTokenAddrs.add(tx.tokenId)
+      }
+    }
+    yield* call(addTokensByAddress, newTokenAddrs)
+  } catch (error) {
+    // Not an essential function, don't propagate errors
+    logger.error('Error when finding and adding new tokens from feed', error)
   }
 }

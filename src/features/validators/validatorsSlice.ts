@@ -2,7 +2,7 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 import { persistReducer } from 'redux-persist'
 import autoMergeLevel2 from 'redux-persist/es/stateReconciler/autoMergeLevel2'
 import storage from 'redux-persist/lib/storage'
-import { GroupVotes, ValidatorGroup } from 'src/features/validators/types'
+import { GroupVotes, StakeEvent, ValidatorGroup } from 'src/features/validators/types'
 
 interface ActivatableStatus {
   status: boolean
@@ -18,6 +18,11 @@ interface ValidatorsState {
   }
   groupVotes: GroupVotes
   hasActivatable: ActivatableStatus
+  stakeEvents: {
+    events: StakeEvent[]
+    lastUpdatedTime: number | null
+    lastBlockNumber: number | null
+  }
 }
 
 export const validatorsInitialState: ValidatorsState = {
@@ -31,6 +36,11 @@ export const validatorsInitialState: ValidatorsState = {
     lastUpdated: null,
     reminderDismissed: false,
     groupAddresses: [],
+  },
+  stakeEvents: {
+    events: [],
+    lastUpdatedTime: null,
+    lastBlockNumber: null,
   },
 }
 
@@ -57,7 +67,25 @@ const validatorsSlice = createSlice({
     dismissActivatableReminder: (state) => {
       state.hasActivatable.reminderDismissed = true
     },
+    addStakeEvents: (
+      state,
+      action: PayloadAction<{
+        events: StakeEvent[]
+        lastUpdatedTime: number
+        lastBlockNumber: number | null
+      }>
+    ) => {
+      const { events, lastUpdatedTime, lastBlockNumber } = action.payload
+      if (events.length) state.stakeEvents.events = [...state.stakeEvents.events, ...events]
+      state.stakeEvents.lastUpdatedTime = lastUpdatedTime
+      state.stakeEvents.lastBlockNumber = lastBlockNumber
+    },
     resetValidators: () => validatorsInitialState,
+    resetValidatorForAccount: (state) => {
+      state.hasActivatable = validatorsInitialState.hasActivatable
+      state.groupVotes = validatorsInitialState.groupVotes
+      state.stakeEvents = validatorsInitialState.stakeEvents
+    },
   },
 })
 
@@ -66,17 +94,19 @@ export const {
   updateGroupVotes,
   updateHasActivatable,
   dismissActivatableReminder,
+  addStakeEvents,
   resetValidators,
+  resetValidatorForAccount,
 } = validatorsSlice.actions
 const validatorsReducer = validatorsSlice.reducer
 
-const validatorsPersistConfig = {
+const persistConfig = {
   key: 'validators',
   storage: storage,
   stateReconciler: autoMergeLevel2,
   whitelist: ['validatorGroups', 'groupVotes', 'hasActivatable'],
 }
 export const persistedValidatorsReducer = persistReducer<ReturnType<typeof validatorsReducer>>(
-  validatorsPersistConfig,
+  persistConfig,
   validatorsReducer
 )

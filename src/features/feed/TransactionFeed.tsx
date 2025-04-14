@@ -1,18 +1,18 @@
 import { useCallback, useMemo } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { FixedSizeList } from 'react-window'
-import { RootState } from 'src/app/rootReducer'
+import { useAppDispatch, useAppSelector } from 'src/app/hooks'
 import Nurture from 'src/components/icons/nurture.svg'
 import { Box } from 'src/components/layout/Box'
+import { useAreBalancesEmpty } from 'src/features/balances/hooks'
 import {
-  FeedItem,
-  FeedItemData,
   FEED_ITEM_HEIGHT_COMPACT,
   FEED_ITEM_HEIGHT_NORMAL,
+  FeedItem,
+  FeedItemData,
 } from 'src/features/feed/FeedItem'
 import { openTransaction } from 'src/features/feed/feedSlice'
-import { useAreBalancesEmpty, useTokens } from 'src/features/wallet/utils'
+import { useTokens } from 'src/features/tokens/hooks'
 import { Color } from 'src/styles/Color'
 import { Font } from 'src/styles/fonts'
 import { mq } from 'src/styles/mediaQueries'
@@ -28,12 +28,12 @@ let heightEstimate = 500
 export function TransactionFeed(props: { feedState?: FeedState }) {
   const feedState = props.feedState || 'normal'
 
-  const openTransactionHash = useSelector((s: RootState) => s.feed.openTransaction)
-  const transactions = useSelector((s: RootState) => s.feed.transactions)
+  const openTransactionHash = useAppSelector((s) => s.feed.openTransaction)
+  const transactions = useAppSelector((s) => s.feed.transactions)
   const isWalletEmpty = useAreBalancesEmpty()
   const tokens = useTokens()
 
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const onFeedItemClick = (hash: string) => {
     dispatch(openTransaction(hash))
@@ -70,13 +70,13 @@ export function TransactionFeed(props: { feedState?: FeedState }) {
 
   return (
     <div css={style.container} ref={setNodeRef}>
-      {isFeedEmpty ? (
+      {isFeedEmpty && feedState !== 'mobile' ? (
         <Box direction="column" align="center" justify="center" styles={style.tipContainer}>
           <div>
             <img width="110em" height="110em" src={Nurture} alt="Plant seed" css={style.logo} />
           </div>
-          <div style={style.tipText}>You have no wallet activity yet.</div>
-          <div style={style.tipText}>
+          <div css={style.tipText}>You have no wallet activity yet.</div>
+          <div css={style.tipText}>
             {isWalletEmpty
               ? 'Start by adding funds to your account.'
               : 'Try a payment or an exchange.'}
@@ -123,6 +123,10 @@ const style: Stylesheet = {
     },
   },
   tipContainer: {
+    display: 'none',
+    [mq[768]]: {
+      display: 'flex',
+    },
     height: '100%',
     padding: '0 2em 3.2em 2em',
     opacity: 0.8,

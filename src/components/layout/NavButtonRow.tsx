@@ -1,21 +1,23 @@
-import { useState } from 'react'
-import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
+import { useAppDispatch } from 'src/app/hooks'
 import { Button } from 'src/components/buttons/Button'
+import BarChartIcon from 'src/components/icons/chart_bar_small.svg'
 import { ChevronIcon } from 'src/components/icons/Chevron'
+import CoinStackIcon from 'src/components/icons/coin_stack.svg'
 import CubeIcon from 'src/components/icons/cube.svg'
 import LockIcon from 'src/components/icons/lock_small.svg'
 import WalletConnectIcon from 'src/components/icons/logos/wallet_connect.svg'
+import NftIcon from 'src/components/icons/nft.svg'
 import SendIcon from 'src/components/icons/send_payment.svg'
 import ExchangeIcon from 'src/components/icons/swap.svg'
 import VoteIcon from 'src/components/icons/vote_small.svg'
 import { Box } from 'src/components/layout/Box'
-import { Backdrop, backdropZIndex } from 'src/components/modal/Backdrop'
-import { config } from 'src/config'
-import { useDownloadDesktopModal } from 'src/features/download/DownloadDesktopModal'
+import { DropdownBox, useDropdownBox } from 'src/components/modal/DropdownBox'
+import { MENTO_URL, MONDO_URL } from 'src/consts'
+// import { useDownloadDesktopModal } from 'src/features/download/DownloadDesktopModal'
 import { useAddressQrCodeModal } from 'src/features/qr/QrCodeModal'
 import { txFlowReset } from 'src/features/txFlow/txFlowSlice'
-import { useWalletAddress } from 'src/features/wallet/utils'
+import { useWalletAddress } from 'src/features/wallet/hooks'
 import { useWalletConnectModal } from 'src/features/walletConnect/WalletConnectModal'
 import { Color } from 'src/styles/Color'
 import { Font } from 'src/styles/fonts'
@@ -28,13 +30,13 @@ interface Props {
 }
 
 export function NavButtonRow({ mobile, disabled }: Props) {
-  const [showDropdown, setShowDropdown] = useState(false)
   const navigate = useNavigate()
-  const dispatch = useDispatch()
+  const dispatch = useAppDispatch()
   const address = useWalletAddress()
   const showQrModal = useAddressQrCodeModal()
   const showWalletConnectModal = useWalletConnectModal()
-  const showDownloadDesktopModal = useDownloadDesktopModal()
+  // const showDownloadDesktopModal = useDownloadDesktopModal()
+  const { isDropdownVisible, showDropdown, hideDropdown } = useDropdownBox()
 
   const onSendClick = () => {
     dispatch(txFlowReset())
@@ -42,52 +44,76 @@ export function NavButtonRow({ mobile, disabled }: Props) {
   }
 
   const onMoreClick = () => {
-    setShowDropdown(true)
+    showDropdown()
   }
 
   const onReceiveClick = () => {
-    setShowDropdown(false)
+    hideDropdown()
     showQrModal(address)
   }
 
   const onExchangeClick = () => {
-    setShowDropdown(false)
-    dispatch(txFlowReset())
-    navigate('/exchange')
+    hideDropdown()
+    // dispatch(txFlowReset())
+    // navigate('/exchange')
+    window.open(MENTO_URL, '_blank')
+  }
+
+  const onBalancesClick = () => {
+    hideDropdown()
+    navigate('/balances')
   }
 
   const onLockClick = () => {
-    setShowDropdown(false)
-    if (config.isElectron) {
-      dispatch(txFlowReset())
-      navigate('/lock')
-    } else {
-      showDownloadDesktopModal()
-    }
+    hideDropdown()
+    window.open(MONDO_URL, '_blank')
+    // if (config.isElectron) {
+    //   dispatch(txFlowReset())
+    //   navigate('/lock')
+    // } else {
+    //   showDownloadDesktopModal()
+    // }
   }
 
   const onStakeClick = () => {
-    setShowDropdown(false)
-    if (config.isElectron) {
-      dispatch(txFlowReset())
-      navigate('/validators')
-    } else {
-      showDownloadDesktopModal()
-    }
+    hideDropdown()
+    window.open(MONDO_URL, '_blank')
+    // if (config.isElectron) {
+    //   dispatch(txFlowReset())
+    //   navigate('/validators')
+    // } else {
+    //   showDownloadDesktopModal()
+    // }
+  }
+
+  const onTrackClick = () => {
+    hideDropdown()
+    window.open(MONDO_URL, '_blank')
+    // if (config.isElectron) {
+    //   navigate('/stake-rewards')
+    // } else {
+    //   showDownloadDesktopModal()
+    // }
   }
 
   const onGovernClick = () => {
-    setShowDropdown(false)
-    if (config.isElectron) {
-      dispatch(txFlowReset())
-      navigate('/governance')
-    } else {
-      showDownloadDesktopModal()
-    }
+    hideDropdown()
+    window.open(MONDO_URL, '_blank')
+    // if (config.isElectron) {
+    //   dispatch(txFlowReset())
+    //   navigate('/governance')
+    // } else {
+    //   showDownloadDesktopModal()
+    // }
+  }
+
+  const onNftClick = () => {
+    hideDropdown()
+    navigate('/nft')
   }
 
   const onConnectClick = () => {
-    setShowDropdown(false)
+    hideDropdown()
     showWalletConnectModal()
   }
 
@@ -95,7 +121,7 @@ export function NavButtonRow({ mobile, disabled }: Props) {
   const buttonHeight = mobile ? '2.75em' : '2.5em'
 
   return (
-    <>
+    <nav>
       <Box direction="row" align="center" justify="evenly" styles={style.container}>
         <Button
           onClick={onSendClick}
@@ -119,7 +145,7 @@ export function NavButtonRow({ mobile, disabled }: Props) {
         >
           More{' '}
           <ChevronIcon
-            direction={showDropdown ? 'n' : 's'}
+            direction={isDropdownVisible ? 'n' : 's'}
             width="13px"
             height="7.5px"
             color="#FFFFFF"
@@ -127,8 +153,21 @@ export function NavButtonRow({ mobile, disabled }: Props) {
           />
         </Button>
 
-        {showDropdown && (
-          <div css={style.menu}>
+        {isDropdownVisible && (
+          <DropdownBox hide={hideDropdown} styles={style.menu}>
+            <MenuItem
+              icon={WalletConnectIcon}
+              title="Connect"
+              description="Use WalletConnect"
+              onClick={onConnectClick}
+              iconStyles={style.walletConnectIcon}
+            />
+            <MenuItem
+              icon={CoinStackIcon}
+              title="Balance"
+              description="View balances"
+              onClick={onBalancesClick}
+            />
             <MenuItem
               icon={SendIcon}
               title="Receive"
@@ -155,29 +194,22 @@ export function NavButtonRow({ mobile, disabled }: Props) {
               onClick={onStakeClick}
             />
             <MenuItem
+              icon={BarChartIcon}
+              title="Track"
+              description="See staking rewards"
+              onClick={onTrackClick}
+            />
+            <MenuItem
               icon={VoteIcon}
               title="Govern"
               description="Vote for proposals"
               onClick={onGovernClick}
             />
-            <MenuItem
-              icon={WalletConnectIcon}
-              title="Connect"
-              description="Use WalletConnect"
-              onClick={onConnectClick}
-              iconStyles={style.walletConnectIcon}
-            />
-          </div>
+            <MenuItem icon={NftIcon} title="NFTs" description="Manage NFTs" onClick={onNftClick} />
+          </DropdownBox>
         )}
       </Box>
-      {showDropdown && (
-        <Backdrop
-          opacity={0.01}
-          color={Color.primaryWhite}
-          onClick={() => setShowDropdown(false)}
-        />
-      )}
-    </>
+    </nav>
   )
 }
 
@@ -236,16 +268,10 @@ const style: Stylesheet = {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-    position: 'absolute',
     top: '4.3em',
     right: '0.2em',
     width: '20.7em',
     padding: '1.3em 0.2em 0 0.8em',
-    borderRadius: 4,
-    zIndex: backdropZIndex + 1,
-    background: Color.primaryWhite,
-    border: `1px solid ${Color.fillLight}`,
-    boxShadow: '0px 2px 5px rgba(0, 0, 0, 0.08)',
     [mq[768]]: {
       top: '4.1em',
       left: '0.1em',
